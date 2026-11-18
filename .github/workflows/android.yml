@@ -26,7 +26,9 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      # GitHub's Ubuntu machines come with the Android SDK preinstalled ($ANDROID_HOME)
+      - name: Accept Android SDK licences
+        run: yes | "$(ls -d $ANDROID_HOME/cmdline-tools/*/bin | sort -V | tail -1)/sdkmanager" --licenses > /dev/null || true
 
       - name: Install packages
         run: npm ci
