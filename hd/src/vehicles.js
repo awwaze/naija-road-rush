@@ -1,15 +1,15 @@
 // Procedural 3D vehicles. Player/rival cars use glossy multi-material models;
 // traffic is merged into one geometry per vehicle (vertex colours) to keep draw calls low.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Invented brands (real car-maker names need licences)
 export const CARS = [
-  { id: 'corona', brand: 'Toyo', name: 'Corona LE', desc: 'The reliable Lagos favourite', price: 0, top: 210, acc: 1.0, grip: 1.0, nos: 1.0, style: 'sedan', color: '#c62828' },
-  { id: 'spirit', brand: 'Hondo', name: 'Spirit Hatch', desc: 'Nimble, quick off the line', price: 3000, top: 222, acc: 1.15, grip: 1.1, nos: 1.0, style: 'hatch', color: '#1e88e5' },
-  { id: 'mercer', brand: 'Mercer', name: 'S-Class Executive', desc: 'Smooth, powerful, very official', price: 8000, top: 238, acc: 1.1, grip: 1.15, nos: 1.15, style: 'exec', color: '#212121' },
-  { id: 'aso', brand: 'Aso Motors', name: 'V8 Hammer', desc: 'Big engine, bigger attitude', price: 14000, top: 252, acc: 1.28, grip: 1.02, nos: 1.25, style: 'muscle', color: '#fdd835' },
+  { id: 'corona', brand: 'Toyo', name: 'Corona LE', desc: 'The reliable Lagos favourite', price: 0, top: 210, acc: 1.0, grip: 1.0, nos: 1.0, style: 'sedan', color: '#c62828', glb: 'models/raw/corona-sam3d.glb', len: 4.6 },
+  { id: 'spirit', brand: 'Hondo', name: 'Spirit Hatch', desc: 'Nimble, quick off the line', price: 3000, top: 222, acc: 1.15, grip: 1.1, nos: 1.0, style: 'hatch', color: '#1e88e5', glb: 'models/raw/spirit-sam3d.glb', len: 4.1 },
+  { id: 'mercer', brand: 'Mercer', name: 'S-Class Executive', desc: 'Smooth, powerful, very official', price: 8000, top: 238, acc: 1.1, grip: 1.15, nos: 1.15, style: 'exec', color: '#212121', glb: 'models/raw/mercer-sam3d.glb', len: 5.0 },
+  { id: 'aso', brand: 'Aso Motors', name: 'V8 Hammer', desc: 'Big engine, bigger attitude', price: 14000, top: 252, acc: 1.28, grip: 1.02, nos: 1.25, style: 'muscle', color: '#fdd835', glb: 'models/raw/aso-sam3d.glb', len: 4.75 },
   { id: 'lagoon', brand: 'Lagoon', name: 'RS Super', desc: 'Built for Third Mainland at dawn (AI-modelled test car)', price: 25000, top: 275, acc: 1.38, grip: 1.25, nos: 1.4, style: 'gt', color: '#00a859', glb: 'models/test-ai-supercar.glb', len: 4.55 },
 ];
 
@@ -31,8 +31,23 @@ function profileShape(pts, archR, wb, wr) {
   return s;
 }
 function extrude(shape, depth, bevel) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 10, steps: 1 });
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4, curveSegments: 16, steps: 1 });
   g.translate(0, 0, -depth / 2); g.rotateY(Math.PI / 2); return g; // length now along -z (front = -z)
+}
+// Turn a flat-sided extruded slab into a rounded car body: curved nose/tail in plan view and
+// "tumblehome" (sides lean inwards towards the roof). Works on any geometry with length along z, width along x.
+function roundBody(g, L, opt = {}) {
+  const pa = g.attributes.position; g.computeBoundingBox(); const bb = g.boundingBox, y0 = bb.min.y, y1 = bb.max.y, hl = L / 2;
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const nose = opt.nose ?? .1, tumble = opt.tumble ?? .12, start = opt.start ?? .8;
+  for (let i = 0; i < pa.count; i++) {
+    const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), t = Math.abs(z) / hl;
+    const fPlan = 1 - nose * Math.pow(ss(start, 1.02, t), 1.6);
+    const fTum = 1 - tumble * ss(y0 + (y1 - y0) * .35, y1, y);
+    const fTuck = 1 - .05 * (1 - ss(y0, y0 + (y1 - y0) * .25, y));
+    pa.setX(i, x * fPlan * fTum * fTuck);
+  }
+  pa.needsUpdate = true; g.computeVertexNormals(); return g;
 }
 function quadPts(pts) { const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]); s.closePath(); return s; }
 
@@ -56,8 +71,8 @@ export function buildCar(spec, color) {
   const st = STY[spec.style] || STY.sedan, M = mats(), g = new THREE.Group();
   const paint = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color || spec.color), metalness: .55, roughness: .28, clearcoat: 1, clearcoatRoughness: .04 });
   const bodyW = st.W - .16;
-  const body = new THREE.Mesh(extrude(profileShape(st.body, 0, st.wb, st.wr), bodyW, .08), paint); body.castShadow = true; g.add(body);
-  const cab = new THREE.Mesh(extrude(quadPts(st.cab), st.W * .8, .06), M.glass); cab.castShadow = true; g.add(cab);
+  const body = new THREE.Mesh(roundBody(extrude(profileShape(st.body, 0, st.wb, st.wr), bodyW, .08), st.L, { tumble: .1 }), paint); body.castShadow = true; g.add(body);
+  const cab = new THREE.Mesh(roundBody(extrude(quadPts(st.cab), st.W * .8, .06), st.L, { tumble: .24, nose: .08, start: .2 }), M.glass); cab.castShadow = true; g.add(cab);
   // painted roof panel + pillars
   const [c0, c1, c2, c3] = st.cab;
   const roof = new THREE.Mesh(extrude(quadPts([[c1[0] + .08, c1[1] - .03], [c1[0] + .05, c1[1] + .03], [c2[0] - .02, c2[1] + .03], [c2[0], c2[1] - .03]]), st.W * .8 + .06, .04), paint); g.add(roof);
@@ -102,7 +117,7 @@ function shadowMat() {
 function colored(geo, hex) { const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } geo.setAttribute('color', new THREE.BufferAttribute(a, 3)); if (!geo.index) return geo; return geo.toNonIndexed(); }
 function box(w, h, d, x, y, z, hex) { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return colored(g.toNonIndexed(), hex); }
 function cyl(r, w, x, y, z, hex, seg = 12) { const g = new THREE.CylinderGeometry(r, r, w, seg); g.rotateZ(Math.PI / 2); g.translate(x, y, z); return colored(g.toNonIndexed(), hex); }
-function wheelsOf(W, zs, r, list) { for (const z of zs) for (const s of [-1, 1]) list.push(cyl(r, .24, s * (W / 2 - .1), r, z, '#151515')); }
+function wheelsOf(W, zs, r, list) { for (const z of zs) for (const s of [-1, 1]) { list.push(cyl(r, .24, s * (W / 2 - .1), r, z, '#151515', 16)); list.push(cyl(r * .6, .26, s * (W / 2 - .1), r, z, '#a7adb2', 10)); } } // tyre + silver rim
 function strip(parts) { return parts.map(p => { const g = p.index ? p.toNonIndexed() : p; for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k); return g; }); }
 function merged(parts) { const g = mergeGeometries(strip(parts)); g.computeBoundingSphere(); return g; }
 
@@ -110,8 +125,8 @@ export function trafficModels() {
   const out = {};
   const carGeo = (hex, style) => {
     const st = STY[style];
-    const body = colored(extrude(profileShape(st.body, 0, st.wb, st.wr), st.W - .16, .06), hex);
-    const cab = colored(extrude(quadPts(st.cab), st.W * .8, .05), '#1a2228');
+    const body = colored(roundBody(extrude(profileShape(st.body, 0, st.wb, st.wr), st.W - .16, .06), st.L, { tumble: .1 }), hex);
+    const cab = colored(roundBody(extrude(quadPts(st.cab), st.W * .8, .05), st.L, { tumble: .24, nose: .08, start: .2 }), '#1a2228');
     const parts = [body, cab, box(.4, .12, .05, -(st.W / 2 - .3), st.body[1][1] - .14, st.L / 2 + .02, '#d01818'), box(.4, .12, .05, (st.W / 2 - .3), st.body[1][1] - .14, st.L / 2 + .02, '#d01818')];
     wheelsOf(st.W, [-st.wb, st.wb], st.wr, parts); return { geo: merged(parts), len: st.L, wid: st.W };
   };
@@ -153,6 +168,7 @@ export async function buildGlbCar(spec) {
   const holder = new THREE.Group(); holder.add(m); holder.rotation.y = lengthAlongZ ? Math.PI : -Math.PI / 2; // front -> -z
   g.add(holder);
   let paint = null;
+  m.traverse(o => { if (o.isMesh && !o.geometry.attributes.normal) { o.geometry = mergeVertices(o.geometry, 1e-4); o.geometry.computeVertexNormals(); } }); // scanned meshes ship without normals
   m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; const mat = o.material = o.material.clone(); mat.roughness = Math.min(mat.roughness ?? 1, .38); mat.metalness = Math.max(mat.metalness ?? 0, .35); paint = paint || mat; } });
   const W = (lengthAlongZ ? size.x : size.z) * s;
   // brake lights overlay + contact shadow
