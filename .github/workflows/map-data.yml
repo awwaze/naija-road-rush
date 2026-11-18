@@ -1,0 +1,29 @@
+# Downloads real road/building data for race routes (OpenStreetMap) and saves it in hd/data/.
+name: Fetch map data
+on:
+  workflow_dispatch:
+    inputs:
+      city:
+        description: City key from tools/map/routes.json
+        default: lagos
+  push:
+    paths: ['tools/map/**']
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Download map data
+        run: |
+          for c in ${{ github.event.inputs.city || 'lagos' }}; do node tools/map/fetch.mjs $c; done
+      - name: Save to repository
+        run: |
+          git config user.name "map-data-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add hd/data
+          git commit -m "Map data update [skip ci]" || echo "no changes"
+          git push

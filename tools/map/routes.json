@@ -1,0 +1,13 @@
+{
+  "lagos": {
+    "name": "Lagos: Third Mainland Bridge to Lekki Toll Gate",
+    "waypoints": [
+      { "q": "Oworonshoki, Lagos, Nigeria", "fallback": [6.5480, 3.3985] },
+      { "q": "Third Mainland Bridge, Lagos, Nigeria", "fallback": [6.5000, 3.3975] },
+      { "q": "Falomo Bridge, Ikoyi, Lagos, Nigeria", "fallback": [6.4440, 3.4250] },
+      { "q": "Lekki Toll Plaza, Lagos, Nigeria", "fallback": [6.4358, 3.4565] }
+    ],
+    "landmarks": ["Third Mainland Bridge", "Lekki Toll Gate", "Lekki-Ikoyi Link Bridge", "Falomo Bridge", "Civic Centre", "Eko Atlantic"],
+    "radius": 260
+  }
+}
