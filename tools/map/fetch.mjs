@@ -49,12 +49,13 @@ const q = `[out:json][timeout:180];
   node[name][~"^(amenity|tourism|shop|man_made|historic)$"~"."](${around.replace(cfg.radius, 150)});
 );
 out geom;`;
-let osm = null;
-for (const ep of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']) {
+let osm = null, osmTries = 0;
+for (const ep of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass-api.de/api/interpreter']) {
+  if (osm) break; await sleep(osmTries++ ? 25000 : 0);
   try {
     const r = await fetch(ep, { method: 'POST', headers: { ...UA, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) });
     if (!r.ok) { console.log(ep, r.status); continue; }
-    osm = await r.json(); console.log('overpass ok', ep, osm.elements.length, 'elements'); break;
+    const j = await r.json(); if (!j.elements || j.elements.length < 20) { console.log(ep, 'returned too few elements', j.elements && j.elements.length, j.remark || ''); continue; } osm = j; console.log('overpass ok', ep, osm.elements.length, 'elements'); break;
   } catch (e) { console.log(ep, e.message); }
 }
 if (!osm) { throw new Error('All Overpass endpoints failed'); }

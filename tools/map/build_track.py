@@ -12,52 +12,61 @@ from PIL import Image, ImageDraw
 
 CITY = sys.argv[1] if len(sys.argv) > 1 else 'lagos'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-RAW = json.load(open(f'{ROOT}/hd/data/{CITY}-raw.json'))
 OUT = f'{ROOT}/hd/public/tracks'
 os.makedirs(OUT, exist_ok=True)
+CONF = json.load(open(f'{ROOT}/tools/map/cities.json'))[CITY]
+ROUTES = CONF['routes']
+HILLY = CONF.get('hilly', False)
 
-# Race routes as slices of the downloaded driving line (km along the line).
-ROUTES = {
-    'lagos': [
-        {'id': 'bridge', 'name': 'Third Mainland Bridge', 'desc': 'Cross the lagoon on one of the longest bridges in Africa',
-         'slices': [[9.6, 20.12]], 'start_name': 'Oworonshoki', 'end_name': 'Adeniji Adele'},
-        {'id': 'lekki', 'name': 'Victoria Island to Lekki Toll Gate', 'desc': 'Ahmadu Bello Way, Ozumba Mbadiwe Avenue and the Lekki-Epe Expressway',
-         'slices': [[24.43, 27.33], [29.66, 33.45]], 'start_name': 'Ahmadu Bello Way', 'end_name': 'Lekki Toll Gate'},
-    ]
-}[CITY]
+RAW = line = P = cum = ELEV = None
+lat0 = lon0 = KX = KZ = 0
+def load_raw(key):
+    global RAW, line, P, cum, ELEV, lat0, lon0, KX, KZ
+    RAW = json.load(open(f'{ROOT}/hd/data/{key}-raw.json'))
+    line = RAW['line']; lat0, lon0 = line[0]
+    KX = math.cos(math.radians(lat0)) * 111320.0; KZ = 110540.0
+    P = [proj(*p) for p in line]
+    cum = [0.0]
+    for i in range(1, len(P)): cum.append(cum[-1] + math.dist(P[i - 1], P[i]))
+    # elevation by distance along the line (linear interpolation of SRTM samples)
+    ev = [(cum[i], e) for i, e in RAW.get('elev', []) if e is not None]
+    ELEV = ev
+    prepare_features()
 
-line = RAW['line']
-lat0, lon0 = line[0]
-KX = math.cos(math.radians(lat0)) * 111320.0
-KZ = 110540.0
+def elev_at(d):
+    if not ELEV: return 0.0
+    if d <= ELEV[0][0]: return ELEV[0][1]
+    for k in range(1, len(ELEV)):
+        if ELEV[k][0] >= d:
+            (d0, e0), (d1, e1) = ELEV[k - 1], ELEV[k]
+            return e0 + (e1 - e0) * ((d - d0) / max(1e-6, d1 - d0))
+    return ELEV[-1][1]
+
 def proj(lat, lon):  # x = east, z = south (three.js: north is -z)
     return ((lon - lon0) * KX, -(lat - lat0) * KZ)
 
-P = [proj(*p) for p in line]
-cum = [0.0]
-for i in range(1, len(P)):
-    cum.append(cum[-1] + math.dist(P[i - 1], P[i]))
-
 def slice_line(a_km, b_km):
     a, b = a_km * 1000, b_km * 1000
+    if b <= 0: b = cum[-1]
+    if a < 0: a = max(0.0, cum[-1] + a)   # negative start = last N km
     pts = []
     for i in range(len(P)):
         if a <= cum[i] <= b:
-            pts.append(P[i])
+            pts.append((P[i][0], P[i][1], elev_at(cum[i])))
     return pts
 
 def resample(pts, step):
     out = [pts[0]]
     carry = 0.0
     for i in range(1, len(pts)):
-        (x0, z0), (x1, z1) = pts[i - 1], pts[i]
-        seg = math.dist(pts[i - 1], pts[i])
+        p0, p1 = pts[i - 1], pts[i]
+        seg = math.dist(p0[:2], p1[:2])
         if seg == 0:
             continue
         d = step - carry
         while d <= seg:
             t = d / seg
-            out.append((x0 + (x1 - x0) * t, z0 + (z1 - z0) * t))
+            out.append(tuple(p0[k] + (p1[k] - p0[k]) * t for k in range(len(p0))))
             d += step
         carry = seg - (d - step)
     return out
@@ -67,8 +76,7 @@ def smooth(pts, win):
     res = []
     for i in range(n):
         a, b = max(0, i - win), min(n, i + win + 1)
-        sx = sum(p[0] for p in pts[a:b]); sz = sum(p[1] for p in pts[a:b])
-        res.append((sx / (b - a), sz / (b - a)))
+        res.append(tuple(sum(p[k] for p in pts[a:b]) / (b - a) for k in range(len(pts[0]))))
     return res
 
 def seg_dist(p, a, b):
@@ -78,64 +86,68 @@ def seg_dist(p, a, b):
     t = 0 if L == 0 else max(0, min(1, ((px - ax) * dx + (pz - az) * dz) / L))
     return math.hypot(px - (ax + t * dx), pz - (az + t * dz))
 
-# --- OSM features ---
-els = RAW['osm']
-bridges = []
-for e in els:
-    t = e.get('tags', {})
-    if e['type'] == 'way' and 'highway' in t and 'bridge' in t and e.get('geometry'):
-        bridges.append([proj(g['lat'], g['lon']) for g in e['geometry']])
+def prepare_features():
+    global els, bridges, water_polys, green_polys, water_lines, buildings_raw, pois
+    # --- OSM features ---
+    els = RAW['osm']
+    bridges = []
+    for e in els:
+        t = e.get('tags', {})
+        if e['type'] == 'way' and 'highway' in t and 'bridge' in t and e.get('geometry'):
+            bridges.append([proj(g['lat'], g['lon']) for g in e['geometry']])
 
-def assemble_rings(ways):
-    """Join open member ways into closed rings by matching end points."""
-    rings, open_ = [], [list(w) for w in ways if len(w) > 1]
-    while open_:
-        cur = open_.pop(0)
-        changed = True
-        while changed and cur[0] != cur[-1]:
-            changed = False
-            for i, w in enumerate(open_):
-                if w[0] == cur[-1]: cur += w[1:]
-                elif w[-1] == cur[-1]: cur += w[::-1][1:]
-                elif w[-1] == cur[0]: cur = w[:-1] + cur
-                elif w[0] == cur[0]: cur = w[::-1][:-1] + cur
-                else: continue
-                open_.pop(i); changed = True; break
-        rings.append(cur)
-    return rings
+    global assemble_rings
+    def assemble_rings(ways):
+        """Join open member ways into closed rings by matching end points."""
+        rings, open_ = [], [list(w) for w in ways if len(w) > 1]
+        while open_:
+            cur = open_.pop(0)
+            changed = True
+            while changed and cur[0] != cur[-1]:
+                changed = False
+                for i, w in enumerate(open_):
+                    if w[0] == cur[-1]: cur += w[1:]
+                    elif w[-1] == cur[-1]: cur += w[::-1][1:]
+                    elif w[-1] == cur[0]: cur = w[:-1] + cur
+                    elif w[0] == cur[0]: cur = w[::-1][:-1] + cur
+                    else: continue
+                    open_.pop(i); changed = True; break
+            rings.append(cur)
+        return rings
 
-water_polys, green_polys, water_lines = [], [], []
-for e in els:
-    t = e.get('tags', {})
-    is_water = t.get('natural') == 'water' or t.get('water')
-    if e['type'] == 'relation' and is_water:
-        outer = [[(g['lat'], g['lon']) for g in m['geometry']] for m in e.get('members', []) if m.get('role') == 'outer' and m.get('geometry')]
-        inner = [[(g['lat'], g['lon']) for g in m['geometry']] for m in e.get('members', []) if m.get('role') == 'inner' and m.get('geometry')]
-        for r in assemble_rings(outer): water_polys.append(('w', r))
-        for r in assemble_rings(inner): water_polys.append(('i', r))
-    elif e['type'] == 'way' and e.get('geometry'):
-        g = [(p['lat'], p['lon']) for p in e['geometry']]
-        if is_water and t.get('water') != 'wastewater' and g[0] == g[-1]:
-            water_polys.append(('w', g))
-        elif t.get('waterway') in ('canal', 'river') :
-            water_lines.append(g)
-        elif (t.get('leisure') == 'park' or t.get('landuse') in ('grass', 'forest', 'recreation_ground') or t.get('natural') in ('wood', 'scrub', 'wetland')) and g[0] == g[-1]:
-            green_polys.append(g)
+    water_polys, green_polys, water_lines = [], [], []
+    for e in els:
+        t = e.get('tags', {})
+        is_water = t.get('natural') == 'water' or t.get('water')
+        if e['type'] == 'relation' and is_water:
+            outer = [[(g['lat'], g['lon']) for g in m['geometry']] for m in e.get('members', []) if m.get('role') == 'outer' and m.get('geometry')]
+            inner = [[(g['lat'], g['lon']) for g in m['geometry']] for m in e.get('members', []) if m.get('role') == 'inner' and m.get('geometry')]
+            for r in assemble_rings(outer): water_polys.append(('w', r))
+            for r in assemble_rings(inner): water_polys.append(('i', r))
+        elif e['type'] == 'way' and e.get('geometry'):
+            g = [(p['lat'], p['lon']) for p in e['geometry']]
+            if is_water and t.get('water') != 'wastewater' and g[0] == g[-1]:
+                water_polys.append(('w', g))
+            elif t.get('waterway') in ('canal', 'river') :
+                water_lines.append(g)
+            elif (t.get('leisure') == 'park' or t.get('landuse') in ('grass', 'forest', 'recreation_ground') or t.get('natural') in ('wood', 'scrub', 'wetland')) and g[0] == g[-1]:
+                green_polys.append(g)
 
-buildings_raw = []
-for e in els:
-    t = e.get('tags', {})
-    if e['type'] == 'way' and 'building' in t and e.get('geometry'):
-        pts = [proj(g['lat'], g['lon']) for g in e['geometry']]
-        if len(pts) < 4: continue
-        buildings_raw.append((e['id'], t, pts[:-1] if pts[0] == pts[-1] else pts))
+    buildings_raw = []
+    for e in els:
+        t = e.get('tags', {})
+        if e['type'] == 'way' and 'building' in t and e.get('geometry'):
+            pts = [proj(g['lat'], g['lon']) for g in e['geometry']]
+            if len(pts) < 4: continue
+            buildings_raw.append((e['id'], t, pts[:-1] if pts[0] == pts[-1] else pts))
 
-pois = []
-for e in els:
-    t = e.get('tags', {})
-    if e['type'] == 'node' and t.get('name'):
-        kind = t.get('amenity') or t.get('shop') or t.get('tourism') or t.get('man_made') or t.get('historic') or 'place'
-        pois.append({'name': t['name'][:28], 'kind': kind, 'p': proj(e['lat'], e['lon'])})
+    pois = []
+    for e in els:
+        t = e.get('tags', {})
+        if e['type'] == 'node' and t.get('name'):
+            kind = t.get('amenity') or t.get('shop') or t.get('tourism') or t.get('man_made') or t.get('historic') or 'place'
+            pois.append({'name': t['name'][:28], 'kind': kind, 'p': proj(e['lat'], e['lon'])})
+
 
 def poly_area(pts):
     a = 0
@@ -197,7 +209,16 @@ def build_route(rt):
     pts = smooth(pts, 18)          # +-36 m: rounds junction corners for racing
     pts = smooth(pts, 10)
     pts = resample(pts, 4.0)
+    terr = [p[2] for p in pts]; pts = [(p[0], p[1]) for p in pts]
     n = len(pts)
+    if HILLY and terr:
+        # smooth the SRTM profile (+-120 m) and make it relative to the lowest point
+        sm = []
+        for i in range(n):
+            a, b = max(0, i - 30), min(n, i + 31); sm.append(sum(terr[a:b]) / (b - a))
+        base = min(sm); terr = [round(v - base, 2) for v in sm]
+    else:
+        terr = [0.0] * n
     img, land, (gminx, gminz, W_m, H_m, scale, Wp, Hp) = make_ground(pts)
     lp = land.load()
     def over_water(p):
@@ -246,7 +267,7 @@ def build_route(rt):
         d = min(abs(i - k) for k in bidx) if len(bidx) < 4000 else 999
         t = max(0.0, 1 - d / RAMP)
         sm[i] = 7.0 * (t * t * (3 - 2 * t))
-    elev = sm
+    elev = [sm[i] + terr[i] for i in range(n)]
     # road names along the route (from OSRM steps)
     names = []
     for st in RAW['steps']:
@@ -310,6 +331,7 @@ def build_route(rt):
         'length': round(4.0 * (n - 1)),
         'pts': [round(v, 1) for p in pts for v in p],
         'elev': [round(e, 2) for e in elev],
+        'terr': terr,
         'bridge': flag,
         'names': clean,
         'buildings': out_b,
@@ -318,10 +340,11 @@ def build_route(rt):
         '_stats': {'points': n, 'buildings': len(out_b), 'pois': len(out_p), 'bridge_pts': sum(flag), 'land_frac': round(land_px, 3), 'px': [Wp, Hp]},
     }
 
-result = {'city': CITY, 'attribution': RAW['attribution'], 'routes': []}
+result = {'city': CITY, 'name': CONF['name'], 'attribution': '© OpenStreetMap contributors', 'routes': []}
 for rt in ROUTES:
+    load_raw(rt['raw'])
     r = build_route(rt)
-    print(rt['id'], r['length'], 'm', r['_stats'], [nm for _, nm in r['names']])
+    print(rt['id'], r['length'], 'm', r['_stats'], 'climb', round(max(r['terr']) - min(r['terr']), 1), [nm for _, nm in r['names']])
     result['routes'].append(r)
 with open(f'{OUT}/{CITY}.json', 'w') as f:
     json.dump(result, f, separators=(',', ':'))

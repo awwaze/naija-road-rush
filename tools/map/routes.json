@@ -98,17 +98,24 @@
   "name": "Calabar: Murtala Mohammed Highway to Marina Resort",
   "waypoints": [
    {
+    "q": "Margaret Ekpo International Airport, Calabar, Nigeria",
+    "fallback": [
+     4.976,
+     8.347
+    ]
+   },
+   {
     "q": "Murtala Mohammed Highway, Calabar, Nigeria",
     "fallback": [
-     4.99,
-     8.34
+     4.977,
+     8.331
     ]
    },
    {
     "q": "Marina Resort, Calabar, Nigeria",
     "fallback": [
-     4.953,
-     8.322
+     4.965,
+     8.317
     ]
    }
   ],
@@ -140,22 +147,22 @@
    {
     "q": "Kofar Nassarawa, Kano, Nigeria",
     "fallback": [
-     11.993,
-     8.528
-    ]
-   },
-   {
-    "q": "Murtala Muhammed Way, Kano, Nigeria",
-    "fallback": [
-     12.002,
-     8.537
+     11.991,
+     8.531
     ]
    },
    {
     "q": "Bompai, Kano, Nigeria",
     "fallback": [
-     12.015,
-     8.557
+     12.005,
+     8.547
+    ]
+   },
+   {
+    "q": "Mallam Aminu Kano International Airport, Nigeria",
+    "fallback": [
+     12.047,
+     8.524
     ]
    }
   ],
@@ -172,10 +179,10 @@
     ]
    },
    {
-    "q": "Ikogosi Warm Springs, Ekiti, Nigeria",
+    "q": "Ikogosi, Ekiti, Nigeria",
     "fallback": [
-     7.588,
-     4.982
+     7.583,
+     4.983
     ]
    }
   ],

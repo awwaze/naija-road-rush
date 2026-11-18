@@ -1,0 +1,40 @@
+{
+ "lagos": {
+  "name": "Lagos",
+  "hilly": false,
+  "routes": [
+   {
+    "raw": "lagos",
+    "id": "bridge",
+    "name": "Third Mainland Bridge",
+    "desc": "Cross the lagoon on one of the longest bridges in Africa",
+    "slices": [
+     [
+      9.6,
+      20.12
+     ]
+    ],
+    "start_name": "Oworonshoki",
+    "end_name": "Adeniji Adele"
+   },
+   {
+    "raw": "lagos",
+    "id": "lekki",
+    "name": "Victoria Island to Lekki Toll Gate",
+    "desc": "Ahmadu Bello Way, Ozumba Mbadiwe Avenue and the Lekki-Epe Expressway",
+    "slices": [
+     [
+      24.43,
+      27.33
+     ],
+     [
+      29.66,
+      33.45
+     ]
+    ],
+    "start_name": "Ahmadu Bello Way",
+    "end_name": "Lekki Toll Gate"
+   }
+  ]
+ }
+}
