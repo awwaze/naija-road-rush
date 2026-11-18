@@ -278,5 +278,5 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
   const G_wave = { t: 0 };
   function dispose() { scene.remove(group); group.traverse(o => { if (o.isInstancedMesh) o.dispose(); }); disposables.forEach(d => d.dispose && d.dispose()); pmrem.dispose(); scene.environment = null; scene.fog = null; }
   onProgress && onProgress(1);
-  return { group, update, dispose, landAt, sunDir };
+  return { group, update, dispose, landAt, sunDir, env };
 }
