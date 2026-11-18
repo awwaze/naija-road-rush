@@ -50,6 +50,13 @@ jobs:
       - name: Rename APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk NaijaRoadRush-test.apk
 
+      - name: Verify APK (signature, package, version)
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --verbose --print-certs NaijaRoadRush-test.apk | grep -E "Verified|Signer #1 certificate SHA-1|SHA-256 digest"
+          "$BT/aapt2" dump badging NaijaRoadRush-test.apk | grep -E "^package|sdkVersion|targetSdk|native-code" || true
+          ls -l NaijaRoadRush-test.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: NaijaRoadRush-test-APK
