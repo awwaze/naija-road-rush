@@ -154,3 +154,41 @@ export function palmLeafTexture() {
   for (let y = 10; y < 250; y += 7) { const w = 60 * Math.sin((y / 256) * Math.PI); g.strokeStyle = y % 14 ? '#2f7d32' : '#43a047'; g.lineWidth = 4; g.beginPath(); g.moveTo(64, y); g.lineTo(64 - w, y + 18); g.moveTo(64, y); g.lineTo(64 + w, y + 18); g.stroke(); }
   const t = tex(c, false); return t;
 }
+
+// ---------- night
+// Emissive window masks covering 8x8 facade tiles (use texture.repeat = 1/8): random windows lit in warm/cool tones.
+export function facadeNightMasks() {
+  const T = 64, N = 8, out = {};
+  const warm = ['#ffd38a', '#ffc46b', '#ffe2b0', '#fff1d6', '#cfe3ff', '#ffb35c'];
+  const make = (seed, litP, draw) => {
+    const [c, g] = canvas(T * N, T * N), r = rng(seed);
+    g.fillStyle = '#000'; g.fillRect(0, 0, T * N, T * N);
+    for (let ty = 0; ty < N; ty++) for (let tx = 0; tx < N; tx++) if (r() < litP) { g.fillStyle = warm[Math.floor(r() * warm.length)]; g.globalAlpha = .55 + r() * .45; draw(g, tx * T, (N - 1 - ty) * T, r); }
+    g.globalAlpha = 1; const t = tex(c); t.repeat.set(1 / N, 1 / N); return t;
+  };
+  // block: the window opening in facadeTextures().block is (22,26)-(106,88) of 128
+  out.block = make(31, .42, (g, x, y) => { g.fillRect(x + 11, y + 13, 42, 31); });
+  // glass tower: lit office floor bands
+  out.glass = make(32, .5, (g, x, y, r) => { g.fillRect(x + 2, y + 6, 60, 50); if (r() < .4) { g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(x + 31, y + 6, 31, 50); } });
+  // low-rise: shop shutter (30,30)-(98,78) of 128, open shops glow
+  out.low = make(33, .3, (g, x, y) => { g.fillRect(x + 15, y + 15, 34, 24); });
+  return out;
+}
+
+// Soft warm pool of light cast by a streetlamp onto the road (additive).
+export function lightPoolTexture() {
+  const [c, g] = canvas(128, 128);
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,214,150,1)'); gr.addColorStop(.35, 'rgba(255,190,110,.55)'); gr.addColorStop(.7, 'rgba(255,170,90,.15)'); gr.addColorStop(1, 'rgba(255,160,80,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  return tex(c, false);
+}
+
+// Round soft glow sprite (lamp halos, headlights, moon halo).
+export function glowTexture() {
+  const [c, g] = canvas(64, 64);
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.25, 'rgba(255,255,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return tex(c, false);
+}

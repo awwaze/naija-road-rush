@@ -164,3 +164,12 @@ a.mbtn{text-decoration:none;text-align:center;display:block}
 .ctab{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:20px;padding:6px 14px;font-weight:900;font-size:13px}
 .ctab.on{background:#00a859;border-color:#7CFCB0}.ctab.soon{opacity:.45}.ctab small{display:block;font-size:9px;font-weight:600;opacity:.8}
 .ccity{font-weight:900;color:#ffe082;margin:4px 0 10px}
+
+/* day / night switch on the race screen */
+.tod{display:inline-flex;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.25);border-radius:22px;padding:3px;margin:2px 0 10px}
+.tod button{background:none;border:0;color:#fff;font-weight:900;font-size:13px;padding:6px 16px;border-radius:18px;opacity:.7}
+.tod button.on{opacity:1;background:#00a859}
+.tod button.on[data-tod="1"]{background:#283c8c;box-shadow:0 0 12px rgba(120,150,255,.6)}
+.race.night{background:linear-gradient(160deg,#141c3c,#0a1028 60%,#05070f)!important;border-color:rgba(140,160,255,.35)}
+.race .nb{position:absolute;left:10px;bottom:10px;font-size:11px;background:rgba(255,200,90,.18);color:#ffd27a;padding:2px 8px;border-radius:10px}
+.race.night .m{margin-bottom:16px}

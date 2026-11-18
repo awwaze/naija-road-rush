@@ -85,7 +85,10 @@ export function buildCar(spec, color) {
   }
   // soft contact shadow
   const sh = new THREE.Mesh(new THREE.PlaneGeometry(st.W * 1.15, st.L * 1.05), shadowMat()); sh.rotation.x = -Math.PI / 2; sh.position.y = .02; g.add(sh);
-  return { group: g, wheels, len: st.L, wid: st.W, paint, setBrake(on) { tailMat.emissiveIntensity = on ? 2.4 : .35; } };
+  let tailBase = .35, braking = false;
+  return { group: g, wheels, len: st.L, wid: st.W, paint, headY: frontY, rearY,
+    setBrake(on) { braking = on; tailMat.emissiveIntensity = on ? (tailBase > 1 ? 6 : 2.4) : tailBase; },
+    setNight(on) { tailBase = on ? 2.2 : .35; tailMat.emissiveIntensity = braking ? (on ? 6 : 2.4) : tailBase; M.head.emissiveIntensity = on ? 8 : 1.2; } };
 }
 let _shadow;
 function shadowMat() {
@@ -155,5 +158,13 @@ export async function buildGlbCar(spec) {
   // brake lights overlay + contact shadow
   const tail = new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff1a1a, emissiveIntensity: 0, transparent: true, opacity: .0 });
   const sh = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.15, spec.len * 1.05), shadowMat()); sh.rotation.x = -Math.PI / 2; sh.position.y = .02; g.add(sh);
-  return { group: g, wheels: [], len: spec.len, wid: W, paint, glb: true, setBrake(on) { } };
+  // night lights for AI models (they have no separate light meshes): glowing head/tail strips, hidden by day
+  const H = size.y * s, lights = new THREE.Group(); lights.visible = false; g.add(lights);
+  const headM = new THREE.MeshBasicMaterial({ color: new THREE.Color(9, 8.6, 7.6) }), tailM = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, .15, .12) });
+  for (const x of [-1, 1]) {
+    const h = new THREE.Mesh(new THREE.BoxGeometry(.36, .1, .04), headM); h.position.set(x * (W / 2 - .34), H * .42, -spec.len / 2 - .03); lights.add(h);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(.4, .1, .04), tailM); t.position.set(x * (W / 2 - .3), H * .5, spec.len / 2 + .03); lights.add(t);
+  }
+  return { group: g, wheels: [], len: spec.len, wid: W, paint, glb: true, headY: H * .42,
+    setBrake(on) { tailM.color.setRGB(on ? 7 : 3.2, on ? .3 : .15, on ? .25 : .12); }, setNight(on) { lights.visible = on; } };
 }

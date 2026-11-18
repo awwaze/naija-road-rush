@@ -58,3 +58,14 @@ export const THEMES = {
   },
 };
 export const CITY_ORDER = ['lagos', 'abuja', 'ph', 'kano', 'enugu', 'ekiti', 'calabar'];
+
+// Night version of any city theme: moonlight, dark fog, glowing streetlights, lit windows, car lights.
+export function nightTheme(TH) {
+  return {
+    ...TH, night: true,
+    sunElev: 38, sunAz: (TH.sunAz + 140) % 360,          // the "sun" becomes the moon
+    sun: [0xa9bbef, .75], hemi: [0x4a5c8c, 0x1c1812, 1.25],
+    fog: [0x0c1428, 140, 1600], exposure: 1.18, env: .35,
+    lampsGlow: true,
+  };
+}

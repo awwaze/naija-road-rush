@@ -67,14 +67,42 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
   const n = track.n, high = quality === 'high';
 
   // ---------- sky, sun, environment
-  const sky = new Sky(); sky.scale.setScalar(45000);
-  const u = sky.material.uniforms; u.turbidity.value = TH.turbidity; u.rayleigh.value = TH.rayleigh; u.mieCoefficient.value = TH.mie; u.mieDirectionalG.value = 0.86;
   const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - TH.sunElev), THREE.MathUtils.degToRad(TH.sunAz));
-  u.sunPosition.value.copy(sunDir);
-  const pmrem = new THREE.PMREMGenerator(renderer); const skyScene = new THREE.Scene(); const sky2 = new Sky(); sky2.scale.setScalar(450); Object.assign(sky2.material.uniforms.sunPosition.value, sunDir);
-  for (const k of ['turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG']) sky2.material.uniforms[k].value = u[k].value;
-  sky2.material.uniforms.showSunDisc.value = 0; // no sun disc in reflections: it made roads glare white when driving toward the sun
-  skyScene.add(sky2); const env = pmrem.fromScene(skyScene, 0, 0.1, 1000).texture; scene.environment = env; scene.environmentIntensity = TH.env ?? 0.55; // high-sun cities get a dimmer sky reflection or roads wash out keep(env);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  let sky, env;
+  if (!TH.night) {
+    sky = new Sky(); sky.scale.setScalar(45000);
+    const u = sky.material.uniforms; u.turbidity.value = TH.turbidity; u.rayleigh.value = TH.rayleigh; u.mieCoefficient.value = TH.mie; u.mieDirectionalG.value = 0.86;
+    u.sunPosition.value.copy(sunDir);
+    const skyScene = new THREE.Scene(), sky2 = new Sky(); sky2.scale.setScalar(450); Object.assign(sky2.material.uniforms.sunPosition.value, sunDir);
+    for (const k of ['turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG']) sky2.material.uniforms[k].value = u[k].value;
+    sky2.material.uniforms.showSunDisc.value = 0; // no sun disc in reflections: it made roads glare white when driving toward the sun
+    skyScene.add(sky2); env = pmrem.fromScene(skyScene, 0, 0.1, 1000).texture;
+  } else {
+    // night: gradient dome with a warm city glow on the horizon, stars and the moon
+    const domeMat = (r) => keep(new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
+      uniforms: { glowDir: { value: new THREE.Vector3(-sunDir.x, 0, -sunDir.z).normalize() } },
+      vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position.z = gl_Position.w; }',
+      fragmentShader: `varying vec3 vD; uniform vec3 glowDir; void main(){ float h = clamp(vD.y, -0.2, 1.0);
+        vec3 zen = vec3(0.004,0.008,0.026), mid = vec3(0.012,0.024,0.065), hor = vec3(0.06,0.045,0.06);
+        vec3 c = mix(hor, mid, smoothstep(0.0, 0.25, h)); c = mix(c, zen, smoothstep(0.25, 0.9, h));
+        float city = pow(max(0.0, 1.0 - abs(h) * 6.0), 2.0) * (0.55 + 0.45 * max(0.0, dot(normalize(vec3(vD.x,0.0,vD.z)), glowDir)));
+        c += vec3(0.16, 0.08, 0.035) * city; if (vD.y < -0.02) c *= 0.4; gl_FragColor = vec4(c, 1.0); }` }));
+    sky = new THREE.Group();
+    const dome = new THREE.Mesh(keep(new THREE.SphereGeometry(20000, 32, 16)), domeMat()); dome.renderOrder = -10; sky.add(dome);
+    const sr = rnd(4242), N = 1800, sp = new Float32Array(N * 3), sc2 = new Float32Array(N * 3);
+    for (let k = 0; k < N; k++) { const th = sr() * Math.PI * 2, y = .06 + Math.pow(sr(), .7) * .94, rr = Math.sqrt(1 - y * y), R0 = 19000; sp.set([Math.cos(th) * rr * R0, y * R0, Math.sin(th) * rr * R0], k * 3); const b = .5 + sr() * 1.6, t = sr(); sc2.set([b * (t < .2 ? .8 : 1), b * (t < .2 ? .85 : 1), b * (t > .85 ? .8 : 1)], k * 3); }
+    const sg = keep(new THREE.BufferGeometry()); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3)); sg.setAttribute('color', new THREE.BufferAttribute(sc2, 3));
+    sky.add(new THREE.Points(sg, keep(new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, fog: false, depthWrite: false }))));
+    const glowTex = keep(TX.glowTexture());
+    const moon = new THREE.Mesh(keep(new THREE.CircleGeometry(260, 32)), keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.2, 2.05), fog: false })));
+    moon.position.copy(sunDir).multiplyScalar(18000); moon.lookAt(0, 0, 0); sky.add(moon);
+    const halo = new THREE.Sprite(keep(new THREE.SpriteMaterial({ map: glowTex, color: 0x6f86c8, transparent: true, opacity: .55, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })));
+    halo.scale.setScalar(4200); halo.position.copy(moon.position); sky.add(halo);
+    const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(keep(new THREE.SphereGeometry(400, 32, 16)), domeMat()));
+    env = pmrem.fromScene(envScene, 0, 0.1, 1000).texture;
+  }
+  scene.environment = env; scene.environmentIntensity = TH.env ?? 0.55; keep(env); // high-sun cities get a dimmer sky reflection or roads wash out
   group.add(sky);
   scene.fog = new THREE.Fog(TH.fog[0], TH.fog[1], high ? TH.fog[2] : Math.min(1400, TH.fog[2]));
   const hemi = new THREE.HemisphereLight(TH.hemi[0], TH.hemi[1], TH.hemi[2]); group.add(hemi);
@@ -94,6 +122,10 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
   const mLow = keep(new THREE.MeshStandardMaterial({ map: fac.low, vertexColors: true, roughness: 0.9 }));
   const mRoof = keep(new THREE.MeshStandardMaterial({ map: roofTex, vertexColors: true, roughness: 0.95 }));
   const mTank = keep(new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.6 }));
+  if (TH.night) { // lit windows: emissive masks spread over 8x8 facade tiles so only some windows glow
+    const nm = TX.facadeNightMasks(); Object.values(nm).forEach(t => keep(t));
+    for (const [m, k, e] of [[mGlass, 'glass', 1.5], [mBlock, 'block', 2.2], [mLow, 'low', 2.0]]) { m.emissive.set(0xffffff); m.emissiveMap = nm[k]; m.emissiveIntensity = e; }
+  }
 
   // ---------- terrain height (real SRTM profile along the road, extended sideways)
   const terr = route.terr || [], hilly = terr.length && Math.max(...terr) - Math.min(...terr) > 1;
@@ -169,9 +201,24 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
   lampIdx.forEach((i, k) => { const nx = track.N[i * 2], nz = track.N[i * 2 + 1]; ps.set(track.P[i * 3] + nx * -6.4, track.P[i * 3 + 1] + .9, track.P[i * 3 + 2] + nz * -6.4); q.setFromAxisAngle(up, Math.atan2(nx, nz) - Math.PI / 2); sc.set(1, 1, 1); tmpM.compose(ps, q, sc); lamps.setMatrixAt(k, tmpM); });
   lamps.castShadow = high; group.add(lamps);
   if (TH.lampsGlow) {
-    const bulbGeo = keep(new THREE.SphereGeometry(.35, 8, 6)), bulbs = new THREE.InstancedMesh(bulbGeo, keep(new THREE.MeshBasicMaterial({ color: 0xffd27a })), lampIdx.length * 2);
-    const v = new THREE.Vector3(); lampIdx.forEach((i, k) => { lamps.getMatrixAt(k, tmpM); for (const [j, ox] of [[0, 2.4], [1, -2.4]]) { v.set(ox, 10.55, 0).applyMatrix4(tmpM); tmpM.clone(); const m2 = new THREE.Matrix4().makeTranslation(v.x, v.y, v.z); bulbs.setMatrixAt(k * 2 + j, m2); } });
+    const night = !!TH.night;
+    const bulbGeo = keep(night ? new THREE.BoxGeometry(.62, .06, .28) : new THREE.SphereGeometry(.35, 8, 6));
+    const bulbs = new THREE.InstancedMesh(bulbGeo, keep(new THREE.MeshBasicMaterial({ color: night ? new THREE.Color(9, 6.4, 3.2) : new THREE.Color(0xffd27a) })), lampIdx.length * 2);
+    const heads = [], v = new THREE.Vector3();
+    lampIdx.forEach((i, k) => { lamps.getMatrixAt(k, tmpM); for (const [j, ox] of [[0, 2.4], [1, -2.4]]) { v.set(ox, night ? 10.6 : 10.55, 0).applyMatrix4(tmpM); heads.push([v.x, v.y, v.z, i]); q.setFromAxisAngle(up, Math.atan2(track.N[i * 2], track.N[i * 2 + 1])); ps.set(v.x, v.y, v.z); sc.set(1, 1, 1); tmpM.compose(ps, q, sc); bulbs.setMatrixAt(k * 2 + j, tmpM); lamps.getMatrixAt(k, tmpM); } });
     group.add(bulbs);
+    if (night) {
+      // pools of warm light on the road under every lamp head (additive decals: cheap on phones, no real lights)
+      const poolGeo = keep(new THREE.PlaneGeometry(1, 1)); poolGeo.rotateX(-Math.PI / 2);
+      const poolMat = keep(new THREE.MeshBasicMaterial({ map: keep(TX.lightPoolTexture()), color: new THREE.Color(.9, .76, .56), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      const pools = new THREE.InstancedMesh(poolGeo, poolMat, heads.length);
+      heads.forEach(([x, y, z, i], k) => { q.setFromAxisAngle(up, Math.atan2(track.N[i * 2], track.N[i * 2 + 1])); ps.set(x, track.P[i * 3 + 1] + .14, z); sc.set(17, 1, 36); tmpM.compose(ps, q, sc); pools.setMatrixAt(k, tmpM); }); // stretched along the road so neighbouring pools just meet
+      pools.renderOrder = 2; group.add(pools);
+      // soft halo around each lamp head
+      const hp = new Float32Array(heads.length * 3); heads.forEach(([x, y, z], k) => hp.set([x, y - .25, z], k * 3));
+      const hg = keep(new THREE.BufferGeometry()); hg.setAttribute('position', new THREE.BufferAttribute(hp, 3));
+      group.add(new THREE.Points(hg, keep(new THREE.PointsMaterial({ map: keep(TX.glowTexture()), color: 0xffb860, size: 4.5, sizeAttenuation: true, transparent: true, opacity: .6, depthWrite: false, blending: THREE.AdditiveBlending }))));
+    }
   }
   onProgress && onProgress(.45);
 
@@ -337,7 +384,7 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
     const beam = new THREE.Mesh(keep(new THREE.BoxGeometry(w, .5, .5)), opt.postMat || mMetal); beam.position.set(mid, 6.9, 0); g.add(beam);
     const st = keep(TX.signTexture(lines, opt.sign || {}));
     const sw = opt.signW || Math.min(w - 1, 12), sh = opt.signH || sw * (opt.sign && opt.sign.h ? opt.sign.h / (opt.sign.w || 1024) : .25);
-    const board = new THREE.Mesh(keep(new THREE.PlaneGeometry(sw, sh)), keep(new THREE.MeshStandardMaterial({ map: st, roughness: .6, emissive: 0xffffff, emissiveMap: st, emissiveIntensity: .05 })));
+    const board = new THREE.Mesh(keep(new THREE.PlaneGeometry(sw, sh)), keep(new THREE.MeshStandardMaterial({ map: st, roughness: .6, emissive: 0xffffff, emissiveMap: st, emissiveIntensity: TH.night ? .9 : .05 })));
     board.position.set(opt.signX ?? 0, 6.9 + sh / 2 - .1, .3); g.add(board);
     const back = new THREE.Mesh(keep(new THREE.PlaneGeometry(sw, sh)), mMetal); back.position.copy(board.position); back.position.z = .26; back.rotation.y = Math.PI; g.add(back);
     group.add(g); gantries.push(g); return g;

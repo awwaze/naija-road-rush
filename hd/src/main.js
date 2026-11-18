@@ -1,12 +1,13 @@
 // Naija Road Rush HD — stage 1: Lagos on real roads.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Track, buildWorld } from './world.js';
 import { CARS, buildCar, buildGlbCar, preloadGlb, trafficModels, TRAFFIC_MIX, TRAFFIC_SPEED } from './vehicles.js';
 import { AudioSys } from './audio.js';
 import { ROAD } from './textures.js';
 import { createPost, Particles, SkidMarks, rampMesh } from './fx.js';
 import { Account } from './account.js';
-import { THEMES, CITY_ORDER } from './themes.js';
+import { THEMES, CITY_ORDER, nightTheme } from './themes.js';
 
 const $ = id => document.getElementById(id);
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
@@ -16,7 +17,7 @@ const KMH = 3.6 / SPEED_SCALE;
 
 // ---------------------------------------------------------------- save data (local for now; Google cloud saves come in stage 2)
 const SAVE_KEY = 'nrrHD.v1';
-const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0 } };
+const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0, night: false } };
 let save = (() => { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d) return { ...DEF, ...d, settings: { ...DEF.settings, ...(d.settings || {}) } }; } catch (e) { } return JSON.parse(JSON.stringify(DEF)); })();
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } try { Account.queueSave(save); } catch (e) { } };
 AudioSys.settings = save.settings;
@@ -92,6 +93,18 @@ const G = { state: 'loading', route: null, track: null, world: null, player: nul
   t: 0, raceTime: 0, cd: 0, shake: 0, lastToast: {}, camMode: save.settings.cam || 0, coinsRun: 0, nitro: .5, nitroOn: false, finished: false, place: 0, resultsShown: false, menuT: 0 };
 let TM = null; // traffic models
 const trafficMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .25 });
+// at night the red tail-light paint on traffic glows (only the pure light red, not red car bodies)
+const uNight = { value: 0 };
+trafficMat.onBeforeCompile = sh => { sh.uniforms.uNight = uNight; sh.fragmentShader = 'uniform float uNight;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_COLOR\n if (uNight > .5 && vColor.r > .55 && vColor.g < .02 && vColor.b < .02) totalEmissiveRadiance += vec3(3.4, .12, .1);\n#endif'); };
+const headlightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(8, 7.6, 6.4) });
+const headGeoCache = {};
+function headlightGeo(type, len, wid) {
+  const k = type + len.toFixed(2) + wid.toFixed(2); if (headGeoCache[k]) return headGeoCache[k];
+  const y = type === 'okada' ? 1.05 : (type === 'brt' || type === 'tanker' || type === 'danfo') ? .95 : .68, parts = [];
+  const xs = type === 'okada' ? [0] : [-(wid / 2 - .32), wid / 2 - .32];
+  for (const x of xs) { const b = new THREE.BoxGeometry(.32, .12, .05); b.translate(x, y, -len / 2 - .04); parts.push(b); }
+  return headGeoCache[k] = mergeGeometries(parts);
+}
 const F = {}; const F2 = {};
 
 async function makeCar(spec, color) { if (spec.glb) { try { return await buildGlbCar(spec); } catch (e) { console.warn('GLB failed, using built-in model', e); } } return buildCar(spec, color); }
@@ -118,7 +131,8 @@ function clearRace() {
 async function setupRoute(cityId, routeId, forMenu) {
   G.state = 'loading'; clearRace();
   await loadCity(cityId);
-  const route = CITY.routes.find(r => r.id === routeId), theme = THEMES[cityId] || THEMES.lagos;
+  const route = CITY.routes.find(r => r.id === routeId), base = THEMES[cityId] || THEMES.lagos, theme = (!forMenu && save.settings.night) ? nightTheme(base) : base;
+  G.night = !!theme.night; uNight.value = G.night ? 1 : 0; if (post) { post.bloom.strength = G.night ? .6 : .07; post.bloom.radius = G.night ? .5 : .3; }
   G.city = cityId; G.theme = theme; G.route = route; G.track = new Track(route);
   renderer.toneMappingExposure = theme.exposure;
   G.world = buildWorld({ scene, renderer, track: G.track, route, theme, groundImg: groundImgs[cityId + '/' + routeId], quality: save.settings.quality, onProgress: p => { $('loadFill').style.width = (60 + p * 40).toFixed(0) + '%'; } });
@@ -134,7 +148,7 @@ const LANES = [-3.6, 0, 3.6], OPP_LANES = [-9.2, -12.8, -16.4];
 function spawnTraffic(nSame, nOpp) {
   const mix = G.theme.traffic, keys = Object.keys(mix), tot = keys.reduce((a, k) => a + mix[k], 0);
   const pickType = () => { let r = Math.random() * tot; for (const k of keys) { r -= mix[k]; if (r <= 0) return k; } return 'car'; };
-  const mk = (opp) => { const type = pickType(), m = TM[type][Math.floor(Math.random() * TM[type].length)], mesh = new THREE.Mesh(m.geo, trafficMat); mesh.castShadow = save.settings.quality === 'high'; scene.add(mesh); const sp = TRAFFIC_SPEED[type];
+  const mk = (opp) => { const type = pickType(), m = TM[type][Math.floor(Math.random() * TM[type].length)], mesh = new THREE.Mesh(m.geo, trafficMat); mesh.castShadow = save.settings.quality === 'high'; scene.add(mesh); if (G.night) mesh.add(new THREE.Mesh(headlightGeo(type, m.len, m.wid), headlightMat)); const sp = TRAFFIC_SPEED[type];
     return { type, mesh, len: m.len, wid: m.wid, lane: Math.floor(Math.random() * 3), x: 0, s: 0, v: (sp[0] + Math.random() * (sp[1] - sp[0])) / KMH, phase: Math.random() * 6, opp }; };
   const L = G.track.length;
   for (let i = 0; i < nSame; i++) { const t = mk(false); t.s = 250 + Math.random() * (L - 400); t.x = LANES[t.lane]; if (t.type === 'brt' || t.type === 'tanker') { t.lane = 2; t.x = LANES[2]; } G.traffic.push(t); }
@@ -149,12 +163,17 @@ function startRace(cityId, routeId) {
     const T = G.track;
     // player
     const spec = carStats(save.car), color = save.colors[spec.id] || spec.color;
-    const model = await makeCar(spec, color); scene.add(model.group); shine(model);
+    const model = await makeCar(spec, color); scene.add(model.group); shine(model); model.setNight && model.setNight(G.night);
+    if (G.night) { // headlight beam that actually lights the road and traffic ahead
+      const beam = new THREE.SpotLight(0xfff0d6, 300, 140, .5, .5, 1.12); beam.position.set(0, (model.headY || .7) + .35, -model.len / 2); beam.target.position.set(0, -1.7, -40);
+      const fill = new THREE.PointLight(0xc4d2ff, 7, 9, 1.4); fill.position.set(0, 2.6, 1.6); // soft moon-blue light on the player's car
+      model.group.add(beam, beam.target, fill);
+    }
     G.player = { spec, model, s: 40, x: 1.8, v: 0, xv: 0, steerVis: 0, maxKmh: spec.top, len: model.len, wid: model.wid, y: 0, vy: 0, air: false, roll: 0, rollV: 0, drift: 0, driftT: 0, yaw: 0 };
     // rivals on the grid ahead/beside
     const grid = [[64, -1.8], [64, 1.8], [52, -1.8], [52, 1.8], [40, -1.8]];
     const rivalModels = await Promise.all(RIVAL_INFO.map(ri => makeCar(carStats(ri.car), ri.color)));
-    G.rivals = RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m);
+    G.rivals = RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m); m.setNight && m.setNight(G.night);
       return { name: ri.name, color: ri.color, model: m, s: grid[k][0], x: grid[k][1], lane: grid[k][1] < 0 ? 0 : 2, v: 0, max: (spec.top * (0.9 + k * 0.012) + Math.random() * 6) / KMH, react: .2 + Math.random() * .6, len: m.len, wid: m.wid, finished: false, finishT: 0, wreck: 0, wy: 0, wvy: 0, spin: 0 }; });
     G.rivals.forEach(r => { r.x = r.lane === 0 ? -1.8 : 1.8; });
     buildPickups(); buildRamps();
@@ -468,11 +487,14 @@ function openRaces() {
     if (ok) b.onclick = () => { raceCity = id; openRaces(); }; tabs.appendChild(b);
   });
   const th = THEMES[raceCity]; $('raceCityTitle').textContent = th.label + ' · ' + th.slogan;
+  const night = !!save.settings.night;
+  document.querySelectorAll('#todSwitch button').forEach(bt => { bt.classList.toggle('on', (bt.dataset.tod === '1') === night); bt.onclick = () => { save.settings.night = bt.dataset.tod === '1'; persist(); openRaces(); }; });
   const list = $('raceList'); list.innerHTML = '';
   INDEX[raceCity].routes.forEach(r => {
     const b = document.createElement('button'); b.className = 'race'; b.style.background = `linear-gradient(160deg, #${th.fog[0].toString(16).padStart(6, '0')}, #0b3d5c 65%, #0a2a1c)`;
     const best = save.best[raceCity + '/' + r.id];
-    b.innerHTML = `${best ? `<span class="best">Best ${fmt(best)}</span>` : ''}<h4>${r.name}</h4><div class="d">${r.desc}</div><div class="m">${(r.length / 1000).toFixed(1)} km · ${r.start} → ${r.end}</div>`;
+    b.innerHTML = `${best ? `<span class="best">Best ${fmt(best)}</span>` : ''}<h4>${r.name}</h4><div class="d">${r.desc}</div><div class="m">${(r.length / 1000).toFixed(1)} km · ${r.start} → ${r.end}</div>${night ? '<span class="nb">🌙 Night race · streetlights on</span>' : ''}`;
+    if (night) b.classList.add('night');
     b.onclick = () => { AudioSys.unlock(); requestTilt(); startRace(raceCity, r.id); }; list.appendChild(b);
   });
 }
@@ -493,7 +515,7 @@ const PAINTS = ['#c62828', '#1e88e5', '#fdd835', '#00a859', '#fb8c00', '#8e24aa'
 function renderGarage() {
   wallet(); const c = CARS[gIdx], owned = save.owned.includes(c.id), color = save.colors[c.id] || c.color;
   if (gCar) gScene.remove(gCar.group); gCar = null; const token = (renderGarage.t = (renderGarage.t || 0) + 1);
-  makeCar(c, color).then(m => { if (token !== renderGarage.t) return; if (gCar) gScene.remove(gCar.group); gCar = m; if (m.glb && gEnv) m.group.traverse(o => { if (o.isMesh) { o.material.envMap = gEnv; o.material.envMapIntensity = 1.3; } }); gScene.add(m.group); });
+  makeCar(c, color).then(m => { m.setNight && m.setNight(false); if (token !== renderGarage.t) return; if (gCar) gScene.remove(gCar.group); gCar = m; if (m.glb && gEnv) m.group.traverse(o => { if (o.isMesh) { o.material.envMap = gEnv; o.material.envMapIntensity = 1.3; } }); gScene.add(m.group); });
   $('gBrand').textContent = c.brand.toUpperCase(); $('gName').textContent = c.name; $('gDesc').textContent = c.desc;
   $('gStats').innerHTML = [['Top speed', c.top / 280, c.top + ' km/h'], ['Acceleration', c.acc / 1.45], ['Grip', c.grip / 1.3], ['Nitro', c.nos / 1.45]].map(([n, v, t]) => `<div class="stat"><span>${n}</span><div class="bar"><i style="width:${Math.min(100, v * 100).toFixed(0)}%"></i></div></div>`).join('') + `<div style="font-size:11px;opacity:.7">Top speed ${c.top} km/h</div>`;
   const sw = $('gSw'); sw.innerHTML = ''; if (owned && !c.glb) PAINTS.forEach(p => { const b = document.createElement('button'); b.className = 'sw' + (p === color ? ' sel' : ''); b.style.background = p; b.onclick = () => { save.colors[c.id] = p; persist(); renderGarage(); }; sw.appendChild(b); });
