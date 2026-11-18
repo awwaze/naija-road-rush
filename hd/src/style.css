@@ -173,3 +173,13 @@ a.mbtn{text-decoration:none;text-align:center;display:block}
 .race.night{background:linear-gradient(160deg,#141c3c,#0a1028 60%,#05070f)!important;border-color:rgba(140,160,255,.35)}
 .race .nb{position:absolute;left:10px;bottom:10px;font-size:11px;background:rgba(255,200,90,.18);color:#ffd27a;padding:2px 8px;border-radius:10px}
 .race.night .m{margin-bottom:16px}
+
+/* game modes */
+.race.locked{filter:grayscale(.8) brightness(.55);cursor:default}
+.race .stg{font-size:10px;font-weight:900;letter-spacing:1px;color:#7CFCB0;margin-bottom:4px}
+#progress .tick{position:absolute;top:-3px;width:3px;height:12px;border-radius:2px;transform:translateX(-50%)}
+#progress .tick.cp{background:#00e676}
+#progress .tick.pol{background:#2979ff;box-shadow:0 0 6px #2979ff}
+#hTime.warn{color:#ff5252;animation:blink .5s infinite alternate}
+@keyframes blink{to{opacity:.35}}
+.ctabs.hidden{display:none}

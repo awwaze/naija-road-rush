@@ -55,23 +55,26 @@
       <div class="tag">Real Nigerian roads, built from real map data</div>
       <div class="wallet center">₦ <span class="wv">0</span></div>
       <div class="grid">
-        <button class="mbtn gold" data-go="races">Race<small>Real roads in Nigerian cities</small></button>
+        <button class="mbtn gold" data-go="career">Career<small>Win your way across Nigeria</small></button>
+        <button class="mbtn" data-go="race">Quick Race<small>You vs 5 rivals, any road</small></button>
+        <button class="mbtn" data-go="rush">Traffic Rush<small>Dodge traffic · 3 crashes and out</small></button>
+        <button class="mbtn" data-go="trial">Time Trial<small>Beat the clock</small></button>
         <button class="mbtn alt" data-go="garage">Garage<small>Cars &amp; paint</small></button>
         <button class="mbtn alt" data-go="settings">Settings<small>Tilt, sound, graphics</small></button>
         <a class="mbtn alt" href="classic/index.html">Classic<small>6-city 2D version</small></a>
       </div>
-      <div class="soon">Coming next: daily rewards · online races · more cities: Ibadan, Benin, Jos</div>
+      <div class="soon">Coming next: daily rewards · rankings · online races</div>
     </div>
   </div>
 
   <div class="screen hidden" id="sRaces">
     <div class="panel">
-      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Choose a city</h3><span class="wallet">₦ <span class="wv">0</span></span></div>
+      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3 id="raceTitle">Choose a city</h3><span class="wallet">₦ <span class="wv">0</span></span></div>
       <div class="ctabs" id="cityTabs"></div>
       <div class="ccity" id="raceCityTitle"></div>
       <div class="tod" id="todSwitch"><button data-tod="0">☀️ Day</button><button data-tod="1">🌙 Night</button></div>
       <div class="races" id="raceList"></div>
-      <div class="hint">You vs 5 rivals on real roads. Dodge danfos, kekes and okadas · grab ₦ coins and N₂O.</div>
+      <div class="hint" id="raceHint"></div>
     </div>
   </div>
 

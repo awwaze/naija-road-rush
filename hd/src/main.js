@@ -8,6 +8,7 @@ import { ROAD } from './textures.js';
 import { createPost, Particles, SkidMarks, rampMesh } from './fx.js';
 import { Account } from './account.js';
 import { THEMES, CITY_ORDER, nightTheme } from './themes.js';
+import { MODE_INFO, checkpointArch, policeStop, policeSign } from './modes.js';
 
 const $ = id => document.getElementById(id);
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
@@ -17,7 +18,7 @@ const KMH = 3.6 / SPEED_SCALE;
 
 // ---------------------------------------------------------------- save data (local for now; Google cloud saves come in stage 2)
 const SAVE_KEY = 'nrrHD.v1';
-const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0, night: false } };
+const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, career: 0, medals: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0, night: false } };
 let save = (() => { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d) return { ...DEF, ...d, settings: { ...DEF.settings, ...(d.settings || {}) } }; } catch (e) { } return JSON.parse(JSON.stringify(DEF)); })();
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } try { Account.queueSave(save); } catch (e) { } };
 AudioSys.settings = save.settings;
@@ -125,6 +126,7 @@ function clearRace() {
   for (const o of [G.player && G.player.model.group, ...G.rivals.map(r => r.model.group), ...G.traffic.map(t => t.mesh), ...G.opp.map(t => t.mesh), G.coins, G.nitroPk]) if (o) scene.remove(o);
   G.player = null; G.rivals = []; G.traffic = []; G.opp = [];
   if (G.ramps) { G.ramps.forEach(r => scene.remove(r.mesh)); } G.ramps = [];
+  (G.props || []).forEach(o => scene.remove(o)); G.props = []; G.police = []; G.cps = [];
   sparks.clear(); smoke.clear(); flames.clear(); skids.clear();
 }
 
@@ -137,7 +139,7 @@ async function setupRoute(cityId, routeId, forMenu) {
   renderer.toneMappingExposure = theme.exposure;
   G.world = buildWorld({ scene, renderer, track: G.track, route, theme, groundImg: groundImgs[cityId + '/' + routeId], quality: save.settings.quality, onProgress: p => { $('loadFill').style.width = (60 + p * 40).toFixed(0) + '%'; } });
   if (!TM) TM = trafficModels();
-  spawnTraffic(forMenu ? 26 : 40, forMenu ? 18 : 26);
+  const tc = forMenu ? [26, 18] : (MODE_INFO[G.mode] || MODE_INFO.race).traffic; spawnTraffic(tc[0], tc[1]);
   // compile every material's shader now (during loading) so far-off scenery doesn't stutter when it first appears
   try { const hidden = []; G.world.group.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } }); renderer.compile(scene, camera); hidden.forEach(o => { o.visible = false; }); } catch (e) { }
 }
@@ -155,7 +157,11 @@ function spawnTraffic(nSame, nOpp) {
   for (let i = 0; i < nOpp; i++) { const t = mk(true); t.s = Math.random() * L; t.x = OPP_LANES[t.lane]; G.opp.push(t); }
 }
 
-function startRace(cityId, routeId) {
+let raceMode = 'race';
+const STAGES = () => CITY_ORDER.flatMap(c => INDEX[c] ? INDEX[c].routes.map(r => ({ city: c, id: r.id, name: r.name, length: r.length, start: r.start, end: r.end })) : []);
+function stageIndex(city, id) { return STAGES().findIndex(st => st.city === city && st.id === id); }
+function startRace(cityId, routeId, mode = raceMode) {
+  G.mode = mode; const MI = MODE_INFO[mode];
   const meta = INDEX[cityId].routes.find(r => r.id === routeId);
   show(null); $('loading').classList.remove('hidden'); $('loadTxt').textContent = 'Building ' + INDEX[cityId].name + ': ' + meta.name + '…'; $('loadFill').style.width = '10%';
   setTimeout(async () => {
@@ -172,15 +178,21 @@ function startRace(cityId, routeId) {
     G.player = { spec, model, s: 40, x: 1.8, v: 0, xv: 0, steerVis: 0, maxKmh: spec.top, len: model.len, wid: model.wid, y: 0, vy: 0, air: false, roll: 0, rollV: 0, drift: 0, driftT: 0, yaw: 0 };
     // rivals on the grid ahead/beside
     const grid = [[64, -1.8], [64, 1.8], [52, -1.8], [52, 1.8], [40, -1.8]];
-    const rivalModels = await Promise.all(RIVAL_INFO.map(ri => makeCar(carStats(ri.car), ri.color)));
-    G.rivals = RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m); m.setNight && m.setNight(G.night);
-      return { name: ri.name, color: ri.color, model: m, s: grid[k][0], x: grid[k][1], lane: grid[k][1] < 0 ? 0 : 2, v: 0, max: (spec.top * (0.9 + k * 0.012) + Math.random() * 6) / KMH, react: .2 + Math.random() * .6, len: m.len, wid: m.wid, finished: false, finishT: 0, wreck: 0, wy: 0, wvy: 0, spin: 0 }; });
+    // career: rivals get faster stage by stage; quick race keeps the standard pace
+    G.stage = mode === 'career' ? stageIndex(cityId, routeId) : -1; const base = mode === 'career' ? .86 + Math.max(0, G.stage) * .022 : .9;
+    const rivalModels = MI.rivals ? await Promise.all(RIVAL_INFO.map(ri => makeCar(carStats(ri.car), ri.color))) : [];
+    G.rivals = !MI.rivals ? [] : RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m); m.setNight && m.setNight(G.night);
+      return { name: ri.name, color: ri.color, model: m, s: grid[k][0], x: grid[k][1], lane: grid[k][1] < 0 ? 0 : 2, v: 0, max: (spec.top * (base + k * 0.012) + Math.random() * 6) / KMH, react: .2 + Math.random() * .6, len: m.len, wid: m.wid, finished: false, finishT: 0, wreck: 0, wy: 0, wvy: 0, spin: 0 }; });
     G.rivals.forEach(r => { r.x = r.lane === 0 ? -1.8 : 1.8; });
     buildPickups(); buildRamps();
-    Object.assign(G, { raceTime: 0, coinsRun: 0, nitro: .5, nitroOn: false, finished: false, place: 0, resultsShown: false, lastToast: {}, shake: 0, timeScale: 1, slowT: 0, takedowns: 0 });
+    Object.assign(G, { raceTime: 0, coinsRun: 0, nitro: .5, nitroOn: false, finished: false, place: 0, resultsShown: false, lastToast: {}, shake: 0, timeScale: 1, slowT: 0, takedowns: 0,
+      score: 0, crashes: 0, combo: 0, lastNear: -9, nearCount: 0, finishReason: 'finish', fines: 0, cleared: 0 });
+    buildModeProps();
     $('loading').classList.add('hidden');
     $('hud').classList.remove('hidden'); $('controls').classList.remove('hidden');
-    $('banner').innerHTML = `<h2>${G.theme.label.toUpperCase()}</h2><p>${G.route.name}</p><div class="sub">${G.route.start} → ${G.route.end} · ${(T.length / 1000).toFixed(1)} km of real road</div>`; $('banner').style.opacity = 1;
+    const stageTxt = mode === 'career' ? `Career · Stage ${G.stage + 1} of ${STAGES().length} · ` : MI.name + ' · ';
+    $('banner').innerHTML = `<h2>${G.theme.label.toUpperCase()}</h2><p>${G.route.name}</p><div class="sub">${stageTxt}${G.route.start} → ${G.route.end} · ${(T.length / 1000).toFixed(1)} km of real road</div>`; $('banner').style.opacity = 1;
+    setupHud();
     G.state = 'countdown'; G.cd = 3.6; G.cdShown = -1;
     if (save.settings.tilt && Input.tiltSeen && Math.abs(Input.tiltRaw) < 30) Input.tiltNeutral = Input.tiltRaw;
     AudioSys.stop(); AudioSys.play(G.theme.music, true);
@@ -225,6 +237,71 @@ function updatePickups() {
   }
 }
 
+// ---------------------------------------------------------------- game modes
+function freeSpot(s, span) { // first stretch at/after s that is on land (not a bridge) and clear of ramps
+  const T = G.track; let k = s;
+  while (k < T.length - 400) { let ok = true; for (let d = -40; d <= span; d += 20) if (T.bridge[T.idx(k + d)]) { ok = false; break; } if (ok && !(G.ramps || []).some(r => Math.abs(r.s - k) < 160)) return k; k += 60; }
+  return -1;
+}
+function buildModeProps() {
+  const T = G.track, L = T.length, add = (o, s, x = 0) => { place(o, s, x); o.position.y -= .06; scene.add(o); G.props.push(o); return o; };
+  G.props = []; G.police = []; G.cps = [];
+  // police checkpoints: one per ~4 km, never on a bridge
+  const n = L > 7500 ? 2 : 1;
+  for (let k = 0; k < n; k++) {
+    const want = L * (k + 1) / (n + 1) + (Math.random() - .5) * 600, s = freeSpot(Math.max(900, want), 60); if (s < 0) continue;
+    const g = add(policeStop(G.night), s); add(policeSign(G.night), s - 260);
+    G.police.push({ s, g, warned: false, done: false });
+  }
+  if (G.mode === 'trial') { // checkpoints at 1/4, 1/2, 3/4 and the finish; each one adds time
+    const spec = G.player.spec, ref = Math.min(175, spec.top * .74) / KMH; let prev = G.player.s;
+    [.25, .5, .75].forEach((f, i) => { const s = L * f; G.cps.push({ s, add: Math.round((s - prev) / ref + 3) }); add(checkpointArch(i + 1, G.night), s); prev = s; });
+    G.cps.push({ s: L - 64, add: 0, finish: true }); add(checkpointArch('FINISH', G.night), L - 64);
+    G.nextCp = 0; G.timeLeft = Math.round((G.cps[0].s - G.player.s) / ref + 5);
+  }
+}
+function registerCrash() {
+  if (G.mode !== 'rush' || G.state !== 'race' || G.t - (G.lastCrash || -9) < 1.2) return;
+  G.lastCrash = G.t; G.crashes++; G.combo = 0; vibrate(180); P_shake(.9);
+  if (G.crashes >= 3) { toast('CAR WRECKED!', 'bad'); finish('wrecked'); }
+  else toast(`BIG CRASH! ${3 - G.crashes} left`, 'bad');
+}
+function modeUpdate(dt, P, kmh, racing) {
+  for (const p of G.police) {
+    if (Math.abs(p.s - P.s) < 700) p.g.userData.tick && p.g.userData.tick(G.t);
+    if (!racing) continue;
+    if (!p.warned && p.s > P.s && p.s - P.s < 300) { p.warned = true; toast('🚔 Police checkpoint ahead: slow to 66 km/h', 'blue'); AudioSys.beep(false); }
+    if (!p.done && P.s >= p.s) {
+      p.done = true;
+      if (kmh > 66) { const fine = Math.min(G.coinsRun, 100); G.coinsRun -= fine; G.fines += fine; if (G.mode === 'rush') G.score = Math.max(0, G.score - 200); AudioSys.thud(); vibrate(90); toast(`Overspeeding at checkpoint! −₦${fine || 0}${G.mode === 'rush' ? ' · −200 pts' : ''}`, 'bad'); }
+      else { G.coinsRun += 30; G.cleared++; AudioSys.chime(); toast('Checkpoint cleared, safe driving! +₦30', 'good'); }
+    }
+  }
+  if (!racing) return;
+  if (G.mode === 'rush') {
+    G.score += P.v * dt * .35 * (kmh > 150 ? 2 : kmh > 110 ? 1.5 : 1);
+    for (const t of G.traffic) { // near miss: overtake a vehicle with less than ~1 m to spare
+      const rel = t.s - P.s;
+      if (t.prevRel > 0 && rel <= 0 && rel > -12 && !(t.knock > 0) && kmh > 85) {
+        const gap = Math.abs(t.x - P.x) - (t.wid + P.wid) / 2;
+        if (gap < 1.1) { G.combo = G.t - G.lastNear < 3 ? G.combo + 1 : 1; G.lastNear = G.t; G.nearCount++; const pts = 50 * G.combo; G.score += pts; G.nitro = Math.min(1, G.nitro + .05); toast(`NEAR MISS${G.combo > 1 ? ' x' + G.combo : ''}  +${pts}`, 'gold', 'nm'); AudioSys.coin(); }
+      }
+      t.prevRel = rel;
+    }
+  }
+  if (G.mode === 'trial') {
+    G.timeLeft -= dt;
+    while (G.nextCp < G.cps.length - 1 && P.s >= G.cps[G.nextCp].s) { const c = G.cps[G.nextCp]; G.nextCp++; const nx = G.cps[G.nextCp]; const addT = nx.finish ? Math.round((nx.s - c.s) / (Math.min(175, P.spec.top * .74) / KMH) + 3) : nx.add; G.timeLeft += addT; AudioSys.chime(); toast(`CHECKPOINT ${G.nextCp}  +${addT}s`, 'good'); }
+    if (G.timeLeft <= 0) { G.timeLeft = 0; toast("TIME'S UP!", 'bad'); finish('timeup'); }
+  }
+}
+const MEDALS = ['gold', 'silver', 'bronze'], MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' };
+function setupHud() {
+  const pl = $('pPos').querySelector('small'), tl = $('hTime').previousElementSibling;
+  pl.textContent = G.mode === 'rush' ? 'SCORE' : G.mode === 'trial' ? 'CHECKPT' : 'POS';
+  tl.textContent = G.mode === 'trial' ? 'TIME LEFT' : 'TIME'; $('hTime').classList.remove('warn');
+}
+
 // ---------------------------------------------------------------- physics
 function update(dt) {
   G.t += dt; if (!G.world) return; const P = G.player, T = G.track;
@@ -233,7 +310,7 @@ function update(dt) {
   const racing = G.state === 'race';
   let steer = 0, gas = 0, brake = 0, nos = 0;
   if (racing) { steer = Input.steer(); brake = Input.isBrake() ? 1 : 0; gas = (Input.isGas() || (save.settings.autoGas && !brake)) ? 1 : 0; nos = Input.isNitro() ? 1 : 0; }
-  else if (G.state === 'finished') { gas = P.v * KMH < 120 ? 1 : 0; steer = Math.max(-1, Math.min(1, (1.8 - P.x) * .5)); }
+  else if (G.state === 'finished') { const ok = G.finishReason === 'finish'; gas = ok && P.v * KMH < 120 ? 1 : 0; brake = ok ? 0 : 1; steer = Math.max(-1, Math.min(1, (1.8 - P.x) * .5)); }
   P.steerVis += (steer - P.steerVis) * Math.min(1, dt * 8);
   const kmh0 = P.v * KMH;
   // drift: tap BRAKE while steering at speed; hold the steer to keep sliding (fills nitro)
@@ -269,6 +346,7 @@ function update(dt) {
   moveTraffic(dt, P);
   updateRivals(dt);
   collide(P);
+  modeUpdate(dt, P, P.v * KMH, racing);
   // pickups
   for (const c of G.coins.userData.list) if (!c.got && Math.abs(c.s - P.s) < 2.2 && Math.abs(c.x - P.x) < 1.5) { c.got = true; G.coinsRun += 10; AudioSys.coin(); }
   for (const c of G.nitroPk.userData.list) if (!c.got && Math.abs(c.s - P.s) < 2.5 && Math.abs(c.x - P.x) < 1.6) { c.got = true; G.nitro = Math.min(1, G.nitro + .4); AudioSys.chime(); toast('+NITRO', 'blue'); }
@@ -387,7 +465,7 @@ function collide(P) {
       const rel = (P.v - o.v) * KMH;
       if (isRival && (rel > 22 || G.nitroOn) && G.state === 'race') { takedown(o, dx); return; }
       if (!isRival && G.nitroOn && o.type !== 'brt' && o.type !== 'tanker') { knock(o, dx); return; }
-      if (ds > 0 && P.v > o.v) { const hard = (P.v - o.v) * KMH > 50; P.v = o.v * .85; P.s = o.s - (o.len + P.len) / 2 * .93; if (!G.crashCD || G.t - G.crashCD > .6) { G.crashCD = G.t; AudioSys.crash(); G.shake = hard ? .7 : .35; vibrate(hard ? 120 : 50); if (!isRival && Math.random() < .5) setTimeout(() => AudioSys.horn(), 160); } }
+      if (ds > 0 && P.v > o.v) { const hard = (P.v - o.v) * KMH > 50; if (!isRival && (P.v - o.v) * KMH > 35) registerCrash(); P.v = o.v * .85; P.s = o.s - (o.len + P.len) / 2 * .93; if (!G.crashCD || G.t - G.crashCD > .6) { G.crashCD = G.t; AudioSys.crash(); G.shake = hard ? .7 : .35; vibrate(hard ? 120 : 50); if (!isRival && Math.random() < .5) setTimeout(() => AudioSys.horn(), 160); } }
       else if (ds <= 0 && isRival && o.v > P.v) { o.v = P.v * .95; }
       else { const push = Math.sign(dx || 1) * .4; P.x -= push * .5; if (isRival) o.x += push * .5; }
     }
@@ -433,10 +511,14 @@ function hud() {
   const P = G.player; if (!P) return;
   $('hSpeed').textContent = Math.round(P.v * KMH);
   $('hCoins').textContent = G.coinsRun; $('hNitro').style.width = (G.nitro * 100).toFixed(0) + '%';
-  $('hTime').textContent = fmt(G.raceTime);
+  if (G.mode === 'trial') { $('hTime').textContent = fmt(Math.max(0, G.timeLeft)); $('hTime').classList.toggle('warn', G.timeLeft < 6); } else $('hTime').textContent = fmt(G.raceTime);
   const togo = Math.max(0, G.track.length - 64 - P.s); $('hDist').textContent = (togo / 1000).toFixed(1) + ' km';
-  const pos = 1 + G.rivals.filter(r => r.finished || r.s > P.s).length; $('hPos').textContent = pos + '/' + (G.rivals.length + 1);
+  if (G.mode === 'rush') { $('hPos').textContent = Math.round(G.score).toLocaleString(); $('pPos').querySelector('small').textContent = 'SCORE ' + '♥'.repeat(Math.max(0, 3 - G.crashes)) + '♡'.repeat(Math.min(3, G.crashes)); }
+  else if (G.mode === 'trial') $('hPos').textContent = Math.min(G.nextCp, G.cps.length - 1) + '/' + (G.cps.length - 1);
+  else { const pos = 1 + G.rivals.filter(r => r.finished || r.s > P.s).length; $('hPos').textContent = pos + '/' + (G.rivals.length + 1); }
   const L = G.track.length - 64; let h = ''; for (const r of G.rivals) h += `<div class="dot" style="left:${Math.min(100, r.s / L * 100).toFixed(1)}%;background:${r.color}"></div>`;
+  for (const c of G.cps || []) h += `<div class="tick cp" style="left:${Math.min(100, c.s / L * 100).toFixed(1)}%"></div>`;
+  for (const p of G.police || []) h += `<div class="tick pol" style="left:${Math.min(100, p.s / L * 100).toFixed(1)}%"></div>`;
   h += `<div class="dot me" style="left:${Math.min(100, P.s / L * 100).toFixed(1)}%"></div>`; $('progress').innerHTML = h;
   if (save.settings.tilt && Input.tiltSeen) { $('tiltInd').classList.remove('hidden'); $('tiltInd').firstElementChild.style.left = (50 + Input.steer() * 45) + '%'; }
 }
@@ -451,22 +533,60 @@ function countdown(dt) {
   moveTraffic(dt, G.player); placeCar(G.player, 0, 0); for (const r of G.rivals) placeCar(r, 0, 0); updatePickups(); G.world.update(G.track.idx(G.player.s), G.player.model.group.position, dt); updateCamera(dt);
   AudioSys.setEngine(true, .05, false);
 }
-function finish() {
-  G.state = 'finished'; G.finT = 0; G.nitroOn = false;
-  G.place = 1 + G.rivals.filter(r => r.finished).length;
-  const el = $('countdown'); el.className = 'go'; el.textContent = ['', '1st!', '2nd', '3rd', '4th', '5th', '6th'][G.place];
-  AudioSys.chime();
+function finish(reason = 'finish') {
+  G.state = 'finished'; G.finT = 0; G.nitroOn = false; G.finishReason = reason;
+  const el = $('countdown'); el.className = 'go';
+  if (MODE_INFO[G.mode].rivals) { G.place = 1 + G.rivals.filter(r => r.finished).length; el.textContent = ['', '1st!', '2nd', '3rd', '4th', '5th', '6th'][G.place]; }
+  else el.textContent = reason === 'wrecked' ? 'WRECKED!' : reason === 'timeup' ? "TIME'S UP!" : 'FINISH!';
+  if (reason === 'finish') AudioSys.chime(); else AudioSys.crash();
 }
 function results() {
   $('countdown').textContent = ''; $('hud').classList.add('hidden'); $('controls').classList.add('hidden');
-  const prize = [0, 600, 360, 220, 80, 50, 30][G.place] || 30, total = prize + G.coinsRun;
-  save.coins += total; const key = G.city + '/' + G.route.id; const best = save.best[key]; const nb = G.place === 1 && (!best || G.raceTime < best); if (nb) save.best[key] = G.raceTime; persist();
-  $('rTitle').textContent = ['', '1st Place!', '2nd Place', '3rd Place', '4th Place', '5th Place', '6th Place'][G.place];
-  $('rSub').textContent = `${G.route.name} · ${fmt(G.raceTime)}`;
-  $('rLines').innerHTML = [['Finishing position', G.place + ' of 6'], ['Time', fmt(G.raceTime) + (nb ? ' (new best!)' : '')], ['Prize money', '₦' + prize], ['Coins collected', '₦' + G.coinsRun], ['Total earned', '₦' + total]].map(([a, b]) => `<div class="ln"><span>${a}</span><b>${b}</b></div>`).join('');
-  const btns = $('rBtns'); btns.innerHTML = '';
+  const key = G.city + '/' + G.route.id, lines = [], btns = $('rBtns'); let title = '', sub = `${G.route.name} · ${MODE_INFO[G.mode].name}`, prize = 0, next = null;
+  const L = (a, b) => lines.push([a, b]);
+  if (G.mode === 'race' || G.mode === 'career') {
+    const career = G.mode === 'career';
+    prize = Math.round(([0, 600, 360, 220, 80, 50, 30][G.place] || 30) * (career ? 1.5 + G.stage * .1 : 1));
+    title = ['', '1st Place!', '2nd Place', '3rd Place', '4th Place', '5th Place', '6th Place'][G.place];
+    const best = save.best[key], nb = G.place === 1 && (!best || G.raceTime < best); if (nb) save.best[key] = G.raceTime;
+    L('Finishing position', G.place + ' of 6'); L('Time', fmt(G.raceTime) + (nb ? ' (new best!)' : ''));
+    if (career) {
+      sub = `Career · Stage ${G.stage + 1} · ${G.route.name}`;
+      const medal = G.place <= 3 ? MEDALS[G.place - 1] : null, prev = save.medals[key];
+      if (medal) { if (!prev || MEDALS.indexOf(medal) < MEDALS.indexOf(prev)) { save.medals[key] = medal; if (!prev) { prize += 300; L('First medal bonus', '₦300'); } } L('Medal', MEDAL_ICON[medal] + ' ' + medal[0].toUpperCase() + medal.slice(1)); }
+      const all = STAGES();
+      if (medal && G.stage === save.career && G.stage + 1 < all.length) { save.career = G.stage + 1; L('Unlocked', '🔓 Stage ' + (G.stage + 2) + ': ' + all[G.stage + 1].name); }
+      else if (medal && G.stage + 1 >= all.length) L('Career', '🏆 Champion of Nigeria!');
+      else if (!medal) L('Next stage', 'Finish top 3 to unlock');
+      if (G.stage + 1 < all.length && G.stage + 1 <= save.career) next = all[G.stage + 1];
+    }
+    L('Prize money', '₦' + prize);
+  } else if (G.mode === 'rush') {
+    const sc = Math.round(G.score), ok = G.finishReason === 'finish', bonus = ok ? 500 + (3 - G.crashes) * 250 : 0;
+    title = ok ? 'Made it through!' : 'Car Wrecked';
+    const k = 'rush/' + key, best = save.best[k] || 0, nb = sc > best; if (nb) save.best[k] = sc;
+    prize = Math.floor(sc / 15) + bonus;
+    L('Score', sc.toLocaleString() + (nb ? ' (new high score!)' : '')); if (!nb && best) L('High score', best.toLocaleString());
+    L('Distance', (G.player.s / 1000).toFixed(2) + ' km'); L('Near misses', G.nearCount); L('Crashes', G.crashes + ' of 3');
+    if (ok) L('Finish bonus', '₦' + bonus); L('Score money', '₦' + Math.floor(sc / 15));
+  } else if (G.mode === 'trial') {
+    const ok = G.finishReason === 'finish', k = 'trial/' + key, best = save.best[k], nb = ok && (!best || G.raceTime < best); if (nb) save.best[k] = G.raceTime;
+    title = ok ? 'Beat the clock!' : "Time's up";
+    prize = ok ? 300 + Math.round(G.timeLeft * 10) : 0;
+    L('Checkpoints', Math.min(G.nextCp, G.cps.length - 1) + ' of ' + (G.cps.length - 1));
+    if (ok) { L('Time', fmt(G.raceTime) + (nb ? ' (new best!)' : '')); if (!nb && best) L('Best', fmt(best)); L('Time left', G.timeLeft.toFixed(1) + 's'); L('Prize money', '₦' + prize); }
+    else L('Distance', (G.player.s / 1000).toFixed(2) + ' of ' + (G.track.length / 1000).toFixed(1) + ' km');
+  }
+  if (G.police.length) L('Police checkpoints', G.cleared + ' cleared' + (G.fines ? ` · fined ₦${G.fines}` : ''));
+  const total = Math.max(0, prize + G.coinsRun); L('Coins collected', '₦' + G.coinsRun); L('Total earned', '₦' + total);
+  save.coins += total; persist();
+  $('rTitle').textContent = title; $('rSub').textContent = sub;
+  $('rLines').innerHTML = lines.map(([a, b]) => `<div class="ln"><span>${a}</span><b>${b}</b></div>`).join('');
+  btns.innerHTML = '';
   const add = (t, c, fn) => { const b = document.createElement('button'); b.className = 'mbtn ' + c; b.textContent = t; b.onclick = fn; btns.appendChild(b); };
-  add('Race again', 'gold', () => startRace(G.city, G.route.id)); add('Other race', 'alt', () => { openRaces(); }); add('Garage', 'alt', () => openGarage()); add('Menu', 'alt', () => goMenu());
+  if (next) add('Next stage ▶', 'gold', () => startRace(next.city, next.id, 'career'));
+  add(G.mode === 'race' ? 'Race again' : 'Try again', next ? 'alt' : 'gold', () => startRace(G.city, G.route.id, G.mode));
+  add(G.mode === 'career' ? 'Stages' : 'Other route', 'alt', () => openRaces(G.mode)); add('Garage', 'alt', () => openGarage()); add('Menu', 'alt', () => goMenu());
   show('sResults'); wallet();
 }
 function pause() { if (G.state !== 'race' && G.state !== 'countdown') return; G.prev = G.state; G.state = 'paused'; show('sPause'); AudioSys.setEngine(false, 0, false); }
@@ -478,24 +598,37 @@ async function goMenu() {
   AudioSys.stop(); AudioSys.play({ bpm: 100, root: 45, prog: [0, 8, 3, 10] }, false);
 }
 let raceCity = 'lagos';
-function openRaces() {
+function openRaces(mode) {
+  if (mode) raceMode = mode; const MI = MODE_INFO[raceMode];
   show('sRaces'); wallet();
-  const tabs = $('cityTabs'); tabs.innerHTML = '';
+  $('raceTitle').textContent = MI.name; $('raceHint').innerHTML = MI.hint;
+  const night = !!save.settings.night;
+  document.querySelectorAll('#todSwitch button').forEach(bt => { bt.classList.toggle('on', (bt.dataset.tod === '1') === night); bt.onclick = () => { save.settings.night = bt.dataset.tod === '1'; persist(); openRaces(); }; });
+  const tabs = $('cityTabs'), list = $('raceList'); tabs.innerHTML = ''; list.innerHTML = '';
+  const card = (cityId, r, extra, locked) => {
+    const th = THEMES[cityId], b = document.createElement('button'); b.className = 'race' + (locked ? ' locked' : '') + (night ? ' night' : '');
+    b.style.background = `linear-gradient(160deg, #${th.fog[0].toString(16).padStart(6, '0')}, #0b3d5c 65%, #0a2a1c)`;
+    b.innerHTML = `${extra.badge ? `<span class="best">${extra.badge}</span>` : ''}${extra.top ? `<div class="stg">${extra.top}</div>` : ''}<h4>${r.name}</h4><div class="d">${extra.desc || r.desc || ''}</div><div class="m">${(r.length / 1000).toFixed(1)} km · ${r.start} → ${r.end}</div>${night && !locked ? '<span class="nb">🌙 Night · streetlights on</span>' : ''}`;
+    if (!locked) b.onclick = () => { AudioSys.unlock(); requestTilt(); startRace(cityId, r.id, raceMode); };
+    list.appendChild(b);
+  };
+  if (raceMode === 'career') {
+    tabs.classList.add('hidden'); const all = STAGES(), got = all.filter(st => save.medals[st.city + '/' + st.id]).length;
+    $('raceCityTitle').textContent = `Stage ${Math.min(save.career + 1, all.length)} of ${all.length} unlocked · ${got} medal${got === 1 ? '' : 's'}`;
+    all.forEach((st, i) => { const m = save.medals[st.city + '/' + st.id], locked = i > save.career;
+      card(st.city, st, { top: `STAGE ${i + 1} · ${THEMES[st.city].label.toUpperCase()}`, badge: locked ? '🔒' : m ? MEDAL_ICON[m] : 'NEW', desc: locked ? 'Finish the previous stage in the top 3 to unlock' : '' }, locked); });
+    return;
+  }
+  tabs.classList.remove('hidden');
   CITY_ORDER.forEach(id => {
     const th = THEMES[id], ok = !!INDEX[id], b = document.createElement('button');
     b.className = 'ctab' + (id === raceCity ? ' on' : '') + (ok ? '' : ' soon'); b.innerHTML = `${th.label}${ok ? '' : '<small>soon</small>'}`;
     if (ok) b.onclick = () => { raceCity = id; openRaces(); }; tabs.appendChild(b);
   });
   const th = THEMES[raceCity]; $('raceCityTitle').textContent = th.label + ' · ' + th.slogan;
-  const night = !!save.settings.night;
-  document.querySelectorAll('#todSwitch button').forEach(bt => { bt.classList.toggle('on', (bt.dataset.tod === '1') === night); bt.onclick = () => { save.settings.night = bt.dataset.tod === '1'; persist(); openRaces(); }; });
-  const list = $('raceList'); list.innerHTML = '';
   INDEX[raceCity].routes.forEach(r => {
-    const b = document.createElement('button'); b.className = 'race'; b.style.background = `linear-gradient(160deg, #${th.fog[0].toString(16).padStart(6, '0')}, #0b3d5c 65%, #0a2a1c)`;
-    const best = save.best[raceCity + '/' + r.id];
-    b.innerHTML = `${best ? `<span class="best">Best ${fmt(best)}</span>` : ''}<h4>${r.name}</h4><div class="d">${r.desc}</div><div class="m">${(r.length / 1000).toFixed(1)} km · ${r.start} → ${r.end}</div>${night ? '<span class="nb">🌙 Night race · streetlights on</span>' : ''}`;
-    if (night) b.classList.add('night');
-    b.onclick = () => { AudioSys.unlock(); requestTilt(); startRace(raceCity, r.id); }; list.appendChild(b);
+    const key = raceCity + '/' + r.id, b = raceMode === 'rush' ? save.best['rush/' + key] : raceMode === 'trial' ? save.best['trial/' + key] : save.best[key];
+    card(raceCity, r, { badge: b ? (raceMode === 'rush' ? 'High ' + b.toLocaleString() : 'Best ' + fmt(b)) : '' }, false);
   });
 }
 
@@ -537,9 +670,9 @@ document.querySelectorAll('#qSeg button').forEach(b => b.onclick = async () => {
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { AudioSys.unlock(); const g = b.dataset.go;
   if (g === 'menu') { if (G.state === 'garage') { G.state = 'menu'; } show('sMenu'); wallet(); if (G.state !== 'menu') goMenu(); else AudioSys.play({ bpm: 100, root: 45, prog: [0, 8, 3, 10] }, false); }
   else if (g === 'profile') { show('sProfile'); renderAccount(Account.profile); }
-  else if (g === 'races') openRaces(); else if (g === 'garage') openGarage(); else if (g === 'settings') { show('sSettings'); renderSettings(); } }));
+  else if (g === 'races') openRaces('race'); else if (MODE_INFO[g]) openRaces(g); else if (g === 'garage') openGarage(); else if (g === 'settings') { show('sSettings'); renderSettings(); } }));
 $('btnPause').onclick = pause; $('btnCam').onclick = cycleCam;
-$('pResume').onclick = resume; $('pRestart').onclick = () => startRace(G.city, G.route.id); $('pQuit').onclick = () => goMenu();
+$('pResume').onclick = resume; $('pRestart').onclick = () => startRace(G.city, G.route.id, G.mode); $('pQuit').onclick = () => goMenu();
 $('pCalib').onclick = () => { if (Input.tiltSeen) { Input.tiltNeutral = Input.tiltRaw; toast('Tilt calibrated', 'good'); } else toast('No tilt sensor detected', 'bad'); };
 if (NATIVE) {
   try { Plug.StatusBar && Plug.StatusBar.hide(); } catch (e) { }
@@ -576,7 +709,9 @@ function applyCloudSave(remote, mergeGuest) {
   if (mergeGuest) { // keep the best of guest progress and the cloud profile
     merged.coins = Math.max(local.coins || 0, remote.coins || 0);
     merged.owned = [...new Set([...(remote.owned || []), ...(local.owned || [])])];
-    merged.best = { ...(remote.best || {}) }; for (const [k, v] of Object.entries(local.best || {})) if (!merged.best[k] || v < merged.best[k]) merged.best[k] = v;
+    merged.best = { ...(remote.best || {}) }; for (const [k, v] of Object.entries(local.best || {})) if (!merged.best[k] || (k.startsWith('rush/') ? v > merged.best[k] : v < merged.best[k])) merged.best[k] = v;
+    merged.career = Math.max(local.career || 0, remote.career || 0);
+    const rank = m => m ? ['gold', 'silver', 'bronze'].indexOf(m) : 9; merged.medals = { ...(remote.medals || {}) }; for (const [k, v] of Object.entries(local.medals || {})) if (rank(v) < rank(merged.medals[k])) merged.medals[k] = v;
   }
   save = merged; AudioSys.settings = save.settings; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { }
   wallet();
