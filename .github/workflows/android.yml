@@ -1,0 +1,69 @@
+# Builds the Android app on GitHub's computers every time you upload changes.
+# Download the result from: your repo > Actions > latest run > Artifacts.
+name: Build Android app
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: # adds a "Run workflow" button in the Actions tab
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      NRR_VERSION_CODE: ${{ github.run_number }}
+      HAS_KEYSTORE: ${{ secrets.NRR_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Copy game into the Android project
+        run: npx cap sync android
+
+      - name: Build test APK (install on your phone)
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk NaijaRoadRush-test.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NaijaRoadRush-test-APK
+          path: NaijaRoadRush-test.apk
+
+      # ---- Play Store build: runs only after you add the 4 signing secrets (see GUIDE) ----
+      - name: Unpack signing key
+        if: env.HAS_KEYSTORE == 'true'
+        run: |
+          echo "${{ secrets.NRR_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "NRR_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build signed Play Store bundle (.aab)
+        if: env.HAS_KEYSTORE == 'true'
+        working-directory: android
+        env:
+          NRR_KEYSTORE_PASSWORD: ${{ secrets.NRR_KEYSTORE_PASSWORD }}
+          NRR_KEY_ALIAS: ${{ secrets.NRR_KEY_ALIAS }}
+          NRR_KEY_PASSWORD: ${{ secrets.NRR_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_KEYSTORE == 'true'
+        with:
+          name: NaijaRoadRush-PlayStore-AAB
+          path: android/app/build/outputs/bundle/release/app-release.aab

@@ -1,0 +1,27 @@
+{
+  "appId": "com.awwalng.naijaroadrush",
+  "appName": "Naija Road Rush",
+  "webDir": "www",
+  "backgroundColor": "#0b1a12",
+  "android": {
+    "backgroundColor": "#0b1a12",
+    "allowMixedContent": false
+  },
+  "ios": {
+    "backgroundColor": "#0b1a12",
+    "contentInset": "never"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2500,
+      "launchAutoHide": true,
+      "backgroundColor": "#0b1a12",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK"
+    }
+  }
+}
