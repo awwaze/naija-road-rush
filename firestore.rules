@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Naija Road Rush — Firestore security rules
+// players/{uid}: each racer's cloud save. Only the owner can read/write it,
+// and the player ID number can never be changed once set.
+// ids/{id}: 8-digit player ID numbers, claimed once and never reassigned.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /players/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.playerId == resource.data.playerId;
+      allow delete: if false;
+    }
+
+    match /ids/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && id.matches('^[0-9]{8}$')
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

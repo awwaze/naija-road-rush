@@ -96,7 +96,15 @@ async function newPlayerId(uid) {
   throw new Error('could not allocate a player ID');
 }
 
-async function loadOrCreate(user, afterGoogle) {
+let loading = null, loadingUid = null;
+function loadOrCreate(user, afterGoogle) {
+  // one profile load per user at a time (auth listener + sign-in both call this)
+  if (loading && loadingUid === user.uid) return loading;
+  loadingUid = user.uid;
+  loading = doLoadOrCreate(user, afterGoogle).finally(() => { loading = null; loadingUid = null; });
+  return loading;
+}
+async function doLoadOrCreate(user, afterGoogle) {
   const { F } = fb;
   const ref = F.doc(db, 'players', user.uid), snap = await F.getDoc(ref);
   const p = basic(user);

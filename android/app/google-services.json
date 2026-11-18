@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1013421418921",
+    "project_id": "naija-road-rush",
+    "storage_bucket": "naija-road-rush.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1013421418921:android:f24dbe41aa6d1687637cb8",
+        "android_client_info": {
+          "package_name": "com.awwalng.naijaroadrush"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1013421418921-47jede6bubkb4psjuqov6r5m4eb8t6p6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBS5Hwgn562c9DwR8UAPvJ4kQe6HouFsHs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1013421418921-47jede6bubkb4psjuqov6r5m4eb8t6p6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
