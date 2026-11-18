@@ -2,6 +2,7 @@
 // traffic is merged into one geometry per vehicle (vertex colours) to keep draw calls low.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Invented brands (real car-maker names need licences)
 export const CARS = [
@@ -9,7 +10,7 @@ export const CARS = [
   { id: 'spirit', brand: 'Hondo', name: 'Spirit Hatch', desc: 'Nimble, quick off the line', price: 3000, top: 222, acc: 1.15, grip: 1.1, nos: 1.0, style: 'hatch', color: '#1e88e5' },
   { id: 'mercer', brand: 'Mercer', name: 'S-Class Executive', desc: 'Smooth, powerful, very official', price: 8000, top: 238, acc: 1.1, grip: 1.15, nos: 1.15, style: 'exec', color: '#212121' },
   { id: 'aso', brand: 'Aso Motors', name: 'V8 Hammer', desc: 'Big engine, bigger attitude', price: 14000, top: 252, acc: 1.28, grip: 1.02, nos: 1.25, style: 'muscle', color: '#fdd835' },
-  { id: 'lagoon', brand: 'Lagoon', name: 'RS Super', desc: 'Built for Third Mainland at dawn', price: 25000, top: 275, acc: 1.38, grip: 1.25, nos: 1.4, style: 'gt', color: '#00a859' },
+  { id: 'lagoon', brand: 'Lagoon', name: 'RS Super', desc: 'Built for Third Mainland at dawn (AI-modelled test car)', price: 25000, top: 275, acc: 1.38, grip: 1.25, nos: 1.4, style: 'gt', color: '#00a859', glb: 'models/test-ai-supercar.glb', len: 4.55 },
 ];
 
 const STY = {
@@ -133,3 +134,26 @@ export function trafficModels() {
 }
 export const TRAFFIC_MIX = { lagos: { car: 34, taxi: 8, danfo: 26, brt: 6, keke: 10, okada: 10, tanker: 6 } };
 export const TRAFFIC_SPEED = { car: [55, 85], taxi: [55, 80], danfo: [50, 75], brt: [45, 60], keke: [30, 42], okada: [45, 70], tanker: [40, 55] }; // km/h
+
+// ---------------- detailed models from GLB files (e.g. AI-generated or artist-made)
+const glbCache = {};
+export function preloadGlb(url) {
+  if (!glbCache[url]) glbCache[url] = new Promise((res, rej) => new GLTFLoader().load(url, g => res(g.scene), undefined, rej));
+  return glbCache[url];
+}
+export async function buildGlbCar(spec) {
+  const src = await preloadGlb(spec.glb);
+  const m = src.clone(true), g = new THREE.Group();
+  const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+  const lengthAlongZ = size.z >= size.x, L = lengthAlongZ ? size.z : size.x, s = (spec.len || 4.5) / L;
+  m.scale.setScalar(s); m.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
+  const holder = new THREE.Group(); holder.add(m); holder.rotation.y = lengthAlongZ ? Math.PI : -Math.PI / 2; // front -> -z
+  g.add(holder);
+  let paint = null;
+  m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; const mat = o.material = o.material.clone(); mat.roughness = Math.min(mat.roughness ?? 1, .38); mat.metalness = Math.max(mat.metalness ?? 0, .35); paint = paint || mat; } });
+  const W = (lengthAlongZ ? size.x : size.z) * s;
+  // brake lights overlay + contact shadow
+  const tail = new THREE.MeshStandardMaterial({ color: 0x400000, emissive: 0xff1a1a, emissiveIntensity: 0, transparent: true, opacity: .0 });
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.15, spec.len * 1.05), shadowMat()); sh.rotation.x = -Math.PI / 2; sh.position.y = .02; g.add(sh);
+  return { group: g, wheels: [], len: spec.len, wid: W, paint, glb: true, setBrake(on) { } };
+}

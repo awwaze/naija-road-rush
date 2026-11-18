@@ -1,7 +1,7 @@
 // Naija Road Rush HD — stage 1: Lagos on real roads.
 import * as THREE from 'three';
 import { Track, buildWorld } from './world.js';
-import { CARS, buildCar, trafficModels, TRAFFIC_MIX, TRAFFIC_SPEED } from './vehicles.js';
+import { CARS, buildCar, buildGlbCar, preloadGlb, trafficModels, TRAFFIC_MIX, TRAFFIC_SPEED } from './vehicles.js';
 import { AudioSys } from './audio.js';
 import { ROAD } from './textures.js';
 import { createPost, Particles, SkidMarks, rampMesh } from './fx.js';
@@ -87,8 +87,9 @@ let TM = null; // traffic models
 const trafficMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .25 });
 const F = {}; const F2 = {};
 
+async function makeCar(spec, color) { if (spec.glb) { try { return await buildGlbCar(spec); } catch (e) { console.warn('GLB failed, using built-in model', e); } } return buildCar(spec, color); }
 function shine(model) {
-  model.group.traverse(o => { if (!o.isMesh) return; const m = o.material; if (m === model.paint) { m.envMap = G.world.env; m.envMapIntensity = 1.7; } else if (m.metalness > .8) { m.envMap = G.world.env; m.envMapIntensity = 1.5; } });
+  model.group.traverse(o => { if (!o.isMesh) return; const m = o.material; if (model.glb && m.map) { m.envMap = G.world.env; m.envMapIntensity = 1.4; return; } if (m === model.paint) { m.envMap = G.world.env; m.envMapIntensity = 1.7; } else if (m.metalness > .8) { m.envMap = G.world.env; m.envMapIntensity = 1.5; } });
 }
 function carStats(id) { const c = CARS.find(x => x.id === id) || CARS[0]; return c; }
 function place(obj, s, x, yaw = 0, roll = 0, reverse = false) {
@@ -136,11 +137,12 @@ function startRace(routeId) {
     const T = G.track;
     // player
     const spec = carStats(save.car), color = save.colors[spec.id] || spec.color;
-    const model = buildCar(spec, color); scene.add(model.group); shine(model);
+    const model = await makeCar(spec, color); scene.add(model.group); shine(model);
     G.player = { spec, model, s: 40, x: 1.8, v: 0, xv: 0, steerVis: 0, maxKmh: spec.top, len: model.len, wid: model.wid, y: 0, vy: 0, air: false, roll: 0, rollV: 0, drift: 0, driftT: 0, yaw: 0 };
     // rivals on the grid ahead/beside
     const grid = [[64, -1.8], [64, 1.8], [52, -1.8], [52, 1.8], [40, -1.8]];
-    G.rivals = RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = buildCar(s, ri.color); scene.add(m.group); shine(m);
+    const rivalModels = await Promise.all(RIVAL_INFO.map(ri => makeCar(carStats(ri.car), ri.color)));
+    G.rivals = RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m);
       return { name: ri.name, color: ri.color, model: m, s: grid[k][0], x: grid[k][1], lane: grid[k][1] < 0 ? 0 : 2, v: 0, max: (spec.top * (0.9 + k * 0.012) + Math.random() * 6) / KMH, react: .2 + Math.random() * .6, len: m.len, wid: m.wid, finished: false, finishT: 0, wreck: 0, wy: 0, wvy: 0, spin: 0 }; });
     G.rivals.forEach(r => { r.x = r.lane === 0 ? -1.8 : 1.8; });
     buildPickups(); buildRamps();
@@ -229,7 +231,7 @@ function update(dt) {
   let ground = 0;
   for (const r of G.ramps) { if (Math.abs(P.x - r.x) < 1.9 && P.s > r.s && P.s < r.s + RAMP.L) ground = Math.max(ground, RAMP.H * (P.s - r.s) / RAMP.L); }
   if (!P.air && ground > 0) { P.y = ground; P.onRamp = true; }
-  else if (!P.air && P.onRamp && ground === 0) { P.onRamp = false; P.air = true; P.vy = P.v * (RAMP.H / RAMP.L) * 1.25 + 2; P.rollV = G.nitroOn ? Math.PI * 2 / Math.max(.6, 2 * P.vy / 22) * (P.x < 0 ? -1 : 1) : 0; P.roll = 0; AudioSys.nitro(); if (P.rollV) toast('BARREL ROLL!', 'gold'); else toast('BIG AIR!', 'gold', 'air'); }
+  else if (!P.air && P.onRamp && ground === 0) { P.onRamp = false; P.air = true; P.vy = Math.min(14, P.v * (RAMP.H / RAMP.L) * .85 + 2); P.rollV = G.nitroOn ? Math.PI * 2 / Math.max(.6, 2 * P.vy / 22) * (P.x < 0 ? -1 : 1) : 0; P.roll = 0; AudioSys.nitro(); if (P.rollV) toast('BARREL ROLL!', 'gold'); else toast('BIG AIR!', 'gold', 'air'); }
   if (P.air) { P.vy -= 22 * dt; P.y += P.vy * dt; P.roll += P.rollV * dt;
     if (P.y <= 0) { P.y = 0; P.air = false; P.vy = 0; const rolled = Math.abs(P.roll) > 5; P.roll = 0; P.rollV = 0; G.shake = .5; AudioSys.thud(); vibrate(60); landDust(P); G.coinsRun += rolled ? 80 : 30; G.nitro = Math.min(1, G.nitro + (rolled ? .3 : .12)); toast(rolled ? '+₦80 · +NITRO' : '+₦30', 'good'); } }
   else if (!P.onRamp) P.y = 0;  // traffic & rivals
@@ -374,7 +376,7 @@ function updateCamera(dt) {
   const back = G.track.frame(P.s - Math.max(0, c.d), F2);
   tv.set(back.x + back.nx * P.x * .85, back.y + c.h, back.z + back.nz * P.x * .85);
   if (c.d < 0) tv.set(px + f.tx * -c.d, py + c.h, pz + f.tz * -c.d);
-  camPos.lerp(tv, c.d < 0 ? 1 : Math.min(1, dt * 9));
+  camPos.lerp(tv, c.d < 0 ? 1 : Math.min(1, dt * (9 + P.v * .3)));
   const ahead = G.track.frame(P.s + c.look, F2);
   camLook.set(ahead.x + ahead.nx * P.x * .7, ahead.y + (c.d < 0 ? 1.0 : 1.1) + P.y * .6, ahead.z + ahead.nz * P.x * .7);
   camPos.y += (P.y * .8 - (camPos.userY || 0)); camPos.userY = P.y * .8;
@@ -469,10 +471,11 @@ function openGarage() { setupGarageScene(); gIdx = Math.max(0, CARS.findIndex(c 
 const PAINTS = ['#c62828', '#1e88e5', '#fdd835', '#00a859', '#fb8c00', '#8e24aa', '#f5f5f5', '#212121', '#b0bec5'];
 function renderGarage() {
   wallet(); const c = CARS[gIdx], owned = save.owned.includes(c.id), color = save.colors[c.id] || c.color;
-  if (gCar) gScene.remove(gCar.group); gCar = buildCar(c, color); gScene.add(gCar.group);
+  if (gCar) gScene.remove(gCar.group); gCar = null; const token = (renderGarage.t = (renderGarage.t || 0) + 1);
+  makeCar(c, color).then(m => { if (token !== renderGarage.t) return; if (gCar) gScene.remove(gCar.group); gCar = m; if (m.glb && gEnv) m.group.traverse(o => { if (o.isMesh) { o.material.envMap = gEnv; o.material.envMapIntensity = 1.3; } }); gScene.add(m.group); });
   $('gBrand').textContent = c.brand.toUpperCase(); $('gName').textContent = c.name; $('gDesc').textContent = c.desc;
   $('gStats').innerHTML = [['Top speed', c.top / 280, c.top + ' km/h'], ['Acceleration', c.acc / 1.45], ['Grip', c.grip / 1.3], ['Nitro', c.nos / 1.45]].map(([n, v, t]) => `<div class="stat"><span>${n}</span><div class="bar"><i style="width:${Math.min(100, v * 100).toFixed(0)}%"></i></div></div>`).join('') + `<div style="font-size:11px;opacity:.7">Top speed ${c.top} km/h</div>`;
-  const sw = $('gSw'); sw.innerHTML = ''; if (owned) PAINTS.forEach(p => { const b = document.createElement('button'); b.className = 'sw' + (p === color ? ' sel' : ''); b.style.background = p; b.onclick = () => { save.colors[c.id] = p; persist(); renderGarage(); }; sw.appendChild(b); });
+  const sw = $('gSw'); sw.innerHTML = ''; if (owned && !c.glb) PAINTS.forEach(p => { const b = document.createElement('button'); b.className = 'sw' + (p === color ? ' sel' : ''); b.style.background = p; b.onclick = () => { save.colors[c.id] = p; persist(); renderGarage(); }; sw.appendChild(b); });
   const buy = $('gBuy');
   if (!owned) { buy.textContent = 'Buy ₦' + c.price.toLocaleString(); buy.disabled = save.coins < c.price; buy.onclick = () => { if (save.coins >= c.price) { save.coins -= c.price; save.owned.push(c.id); save.car = c.id; persist(); AudioSys.chime(); renderGarage(); } }; }
   else if (save.car === c.id) { buy.textContent = '✓ Selected'; buy.disabled = true; }

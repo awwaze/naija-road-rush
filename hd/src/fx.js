@@ -29,7 +29,7 @@ const SpeedShader = {
 export function createPost(renderer, scene, camera) {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), .32, .55, .88); composer.addPass(bloom);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), .12, .35, 2.2); composer.addPass(bloom);
   const speed = new ShaderPass(SpeedShader); composer.addPass(speed);
   composer.addPass(new OutputPass());
   return {
