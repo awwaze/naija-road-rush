@@ -1,13 +1,211 @@
 {
-  "lagos": {
-    "name": "Lagos: Third Mainland Bridge to Lekki Toll Gate",
-    "waypoints": [
-      { "q": "Oworonshoki, Lagos, Nigeria", "fallback": [6.5480, 3.3985] },
-      { "q": "Third Mainland Bridge, Lagos, Nigeria", "fallback": [6.5000, 3.3975] },
-      { "q": "Falomo Bridge, Ikoyi, Lagos, Nigeria", "fallback": [6.4440, 3.4250] },
-      { "q": "Lekki Toll Plaza, Lagos, Nigeria", "fallback": [6.4358, 3.4565] }
-    ],
-    "landmarks": ["Third Mainland Bridge", "Lekki Toll Gate", "Lekki-Ikoyi Link Bridge", "Falomo Bridge", "Civic Centre", "Eko Atlantic"],
-    "radius": 260
-  }
+ "lagos": {
+  "name": "Lagos: Third Mainland Bridge to Lekki Toll Gate",
+  "waypoints": [
+   {
+    "q": "Oworonshoki, Lagos, Nigeria",
+    "fallback": [
+     6.548,
+     3.3985
+    ]
+   },
+   {
+    "q": "Third Mainland Bridge, Lagos, Nigeria",
+    "fallback": [
+     6.5,
+     3.3975
+    ]
+   },
+   {
+    "q": "Falomo Bridge, Ikoyi, Lagos, Nigeria",
+    "fallback": [
+     6.444,
+     3.425
+    ]
+   },
+   {
+    "q": "Lekki Toll Plaza, Lagos, Nigeria",
+    "fallback": [
+     6.4358,
+     3.4565
+    ]
+   }
+  ],
+  "landmarks": [
+   "Third Mainland Bridge",
+   "Lekki Toll Gate",
+   "Lekki-Ikoyi Link Bridge",
+   "Falomo Bridge",
+   "Civic Centre",
+   "Eko Atlantic"
+  ],
+  "radius": 260
+ },
+ "abuja-zuma": {
+  "name": "Abuja: Zuma Rock Expressway",
+  "waypoints": [
+   {
+    "q": "Madalla, Niger, Nigeria",
+    "fallback": [
+     9.098,
+     7.215
+    ]
+   },
+   {
+    "q": "Zuma Rock, Nigeria",
+    "fallback": [
+     9.127,
+     7.23
+    ]
+   },
+   {
+    "q": "Suleja, Niger, Nigeria",
+    "fallback": [
+     9.18,
+     7.18
+    ]
+   }
+  ],
+  "radius": 260,
+  "landmarks": [
+   "Zuma Rock"
+  ]
+ },
+ "abuja-gate": {
+  "name": "Abuja: City Gate to Central Area",
+  "waypoints": [
+   {
+    "q": "Abuja City Gate, Nigeria",
+    "fallback": [
+     8.985,
+     7.43
+    ]
+   },
+   {
+    "q": "Eagle Square, Abuja, Nigeria",
+    "fallback": [
+     9.058,
+     7.494
+    ]
+   }
+  ],
+  "radius": 260,
+  "landmarks": [
+   "City Gate"
+  ]
+ },
+ "calabar": {
+  "name": "Calabar: Murtala Mohammed Highway to Marina Resort",
+  "waypoints": [
+   {
+    "q": "Murtala Mohammed Highway, Calabar, Nigeria",
+    "fallback": [
+     4.99,
+     8.34
+    ]
+   },
+   {
+    "q": "Marina Resort, Calabar, Nigeria",
+    "fallback": [
+     4.953,
+     8.322
+    ]
+   }
+  ],
+  "radius": 260
+ },
+ "ph": {
+  "name": "Port Harcourt: Aba Road to Garrison",
+  "waypoints": [
+   {
+    "q": "Rumuokoro, Port Harcourt, Nigeria",
+    "fallback": [
+     4.868,
+     7.0
+    ]
+   },
+   {
+    "q": "Garrison Junction, Port Harcourt, Nigeria",
+    "fallback": [
+     4.806,
+     7.025
+    ]
+   }
+  ],
+  "radius": 260
+ },
+ "kano": {
+  "name": "Kano: Kofar Nassarawa and Murtala Mohammed Way",
+  "waypoints": [
+   {
+    "q": "Kofar Nassarawa, Kano, Nigeria",
+    "fallback": [
+     11.993,
+     8.528
+    ]
+   },
+   {
+    "q": "Murtala Muhammed Way, Kano, Nigeria",
+    "fallback": [
+     12.002,
+     8.537
+    ]
+   },
+   {
+    "q": "Bompai, Kano, Nigeria",
+    "fallback": [
+     12.015,
+     8.557
+    ]
+   }
+  ],
+  "radius": 260
+ },
+ "ekiti": {
+  "name": "Ekiti: Ado-Ekiti to Ikogosi hills",
+  "waypoints": [
+   {
+    "q": "Ado-Ekiti, Nigeria",
+    "fallback": [
+     7.621,
+     5.221
+    ]
+   },
+   {
+    "q": "Ikogosi Warm Springs, Ekiti, Nigeria",
+    "fallback": [
+     7.588,
+     4.982
+    ]
+   }
+  ],
+  "radius": 260
+ },
+ "enugu": {
+  "name": "Enugu: Milliken Hill",
+  "waypoints": [
+   {
+    "q": "Ogui Road, Enugu, Nigeria",
+    "fallback": [
+     6.44,
+     7.495
+    ]
+   },
+   {
+    "q": "Milliken Hill, Enugu, Nigeria",
+    "fallback": [
+     6.468,
+     7.461
+    ]
+   },
+   {
+    "q": "Ninth Mile Corner, Enugu, Nigeria",
+    "fallback": [
+     6.531,
+     7.423
+    ]
+   }
+  ],
+  "radius": 260
+ }
 }

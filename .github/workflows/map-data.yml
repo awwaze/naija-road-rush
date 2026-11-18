@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       city:
-        description: City key from tools/map/routes.json
-        default: lagos
+        description: Route keys from tools/map/routes.json (comma separated), or --missing
+        default: --missing
   push:
     paths: ['tools/map/**']
 permissions:
@@ -19,7 +19,7 @@ jobs:
         with: { node-version: 22 }
       - name: Download map data
         run: |
-          for c in ${{ github.event.inputs.city || 'lagos' }}; do node tools/map/fetch.mjs $c; done
+          node tools/map/fetch.mjs ${{ github.event.inputs.city || '--missing' }}
       - name: Save to repository
         run: |
           git config user.name "map-data-bot"

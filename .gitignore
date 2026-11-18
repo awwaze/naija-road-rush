@@ -5,3 +5,5 @@ node_modules/
 *.jks
 *.keystore
 keystore.properties
+
+!android/app/nrr-debug.keystore
