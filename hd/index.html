@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#008751">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Naija Road Rush HD</title>
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="loading" class="screen solid">
+  <div class="logo"><div class="a">NAIJA</div><div class="b">ROAD RUSH <span class="hd">HD</span></div></div>
+  <div class="loadbar"><i id="loadFill"></i></div>
+  <div class="loadtxt" id="loadTxt">Loading Lagos…</div>
+</div>
+
+<div id="hud" class="hidden">
+  <div class="hud-left">
+    <div class="pill" id="pPos"><small>POS</small><b id="hPos">1/6</b></div>
+    <div class="pill"><small>TIME</small><b id="hTime">0:00.0</b></div>
+    <div class="pill"><small>TO GO</small><b id="hDist">0.0 km</b></div>
+  </div>
+  <div class="hud-right">
+    <div class="pill coins">₦<b id="hCoins">0</b></div>
+    <div class="speedo"><b id="hSpeed">0</b><small>km/h</small><div class="bar"><i id="hNitro"></i></div><div class="barlbl">NITRO</div></div>
+  </div>
+  <div id="roadName"></div>
+  <div id="progress"></div>
+  <div class="topbtns"><button id="btnCam" aria-label="Camera">CAM</button><button id="btnPause" aria-label="Pause">II</button></div>
+  <div id="attrib">Map data © OpenStreetMap contributors</div>
+</div>
+<div id="banner"></div>
+<div id="countdown"></div>
+<div id="toasts"></div>
+
+<div id="controls" class="hidden">
+  <div class="cl left"><div class="cbtn arrow" data-k="left">◀</div><div class="cbtn arrow" data-k="right">▶</div></div>
+  <div class="cl right">
+    <div class="colstack"><div class="cbtn horn" data-k="horn">HORN</div><div class="cbtn brake" data-k="brake">BRAKE</div></div>
+    <div class="colstack"><div class="cbtn nitro" data-k="nitro">N₂O</div><div class="cbtn gas" data-k="gas">GAS</div></div>
+  </div>
+  <div id="tiltInd" class="hidden"><i></i></div>
+</div>
+
+<div id="screens">
+  <div class="screen hidden" id="sMenu">
+    <div class="menuwrap">
+      <div class="logo"><div class="a">NAIJA</div><div class="b">ROAD RUSH <span class="hd">HD</span></div></div>
+      <div class="tag">Real Lagos roads, built from real map data</div>
+      <div class="wallet center">₦ <span class="wv">0</span></div>
+      <div class="grid">
+        <button class="mbtn gold" data-go="races">Race<small>Lagos · 2 real routes</small></button>
+        <button class="mbtn alt" data-go="garage">Garage<small>Cars &amp; paint</small></button>
+        <button class="mbtn alt" data-go="settings">Settings<small>Tilt, sound, graphics</small></button>
+        <a class="mbtn alt" href="classic/index.html">Classic<small>6-city 2D version</small></a>
+      </div>
+      <div class="soon">Coming next: Google login · daily rewards · online races · more cities: Abuja, Port Harcourt, Kano, Calabar, Ibadan, Enugu, Benin, Jos, Ekiti</div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="sRaces">
+    <div class="panel">
+      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Lagos</h3><span class="wallet">₦ <span class="wv">0</span></span></div>
+      <div class="races" id="raceList"></div>
+      <div class="hint">You vs 5 rivals on real roads. Dodge danfos, kekes and okadas · grab ₦ coins and N₂O.</div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="sGarage">
+    <div class="garagebar">
+      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Garage</h3><span class="wallet">₦ <span class="wv">0</span></span></div>
+      <div class="gbottom">
+        <button class="navb" id="gPrev">◀</button>
+        <div class="ginfo"><div class="gbrand" id="gBrand"></div><div class="gname" id="gName"></div><div class="gdesc" id="gDesc"></div><div id="gStats"></div><div class="swatches" id="gSw"></div></div>
+        <button class="navb" id="gNext">▶</button>
+      </div>
+      <div class="btnrow"><button class="mbtn gold" id="gBuy">Buy</button></div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="sSettings">
+    <div class="panel narrow">
+      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Settings</h3><span></span></div>
+      <div class="setrow"><div>Tilt steering<small>Move your phone to steer (buttons still work)</small></div><button class="toggle" data-set="tilt"></button></div>
+      <div class="setrow"><div>Tilt sensitivity</div><input type="range" min="0.5" max="2" step="0.1" id="sens"></div>
+      <div class="setrow"><div>Auto accelerate<small>Car drives forward by itself — just steer</small></div><button class="toggle" data-set="autoGas"></button></div>
+      <div class="setrow"><div>Music</div><button class="toggle" data-set="music"></button></div>
+      <div class="setrow"><div>Sound effects</div><button class="toggle" data-set="sfx"></button></div>
+      <div class="setrow"><div>Graphics<small>Low = smoother on older phones</small></div><div class="seg" id="qSeg"><button data-q="low">Low</button><button data-q="high">High</button></div></div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="sPause">
+    <div class="panel narrow center">
+      <h3 class="big">PAUSED</h3>
+      <div class="grid one">
+        <button class="mbtn" id="pResume">Resume</button>
+        <button class="mbtn alt" id="pCalib">Calibrate tilt (hold phone level)</button>
+        <button class="mbtn alt" id="pRestart">Restart</button>
+        <button class="mbtn red" id="pQuit">Quit to menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="sResults">
+    <div class="panel narrow res">
+      <h2 id="rTitle">1st Place!</h2>
+      <div class="center sub" id="rSub"></div>
+      <div class="lines" id="rLines"></div>
+      <div class="btnrow" id="rBtns"></div>
+    </div>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

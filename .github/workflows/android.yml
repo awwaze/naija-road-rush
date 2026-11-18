@@ -20,6 +20,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            hd/package-lock.json
 
       - uses: actions/setup-java@v4
         with:
@@ -32,6 +35,10 @@ jobs:
 
       - name: Install packages
         run: npm ci
+
+      - name: Build the HD game into www/
+        working-directory: hd
+        run: npm ci && npx vite build
 
       - name: Copy game into the Android project
         run: npx cap sync android
