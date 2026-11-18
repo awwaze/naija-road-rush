@@ -1,0 +1,60 @@
+// Per-city look: time of day, weather, building colours, ground, trees, traffic and music.
+export const THEMES = {
+  lagos: {
+    label: 'Lagos', slogan: 'Centre of Excellence', sunElev: 24, sunAz: 215, turbidity: 6.5, rayleigh: 1.6, mie: .006,
+    sun: [0xffe6c4, 2.1], hemi: [0xcfe0f0, 0x4a3f30, .35], fog: [0xaebfc8, 350, 2400], exposure: .82,
+    palette: ['#e8d9b5', '#f1ede4', '#e9b98f', '#a9c6d8', '#e6cf6e', '#d59f86', '#c9c1b0', '#9fc2a8', '#e2ab7f', '#c7d1d9', '#f0e0c0'],
+    glass: ['#b9d4e3', '#a8c9c0', '#c9d3db', '#9fb7cf'], ground: { land: [128, 122, 96], green: [62, 110, 48], shore: [176, 160, 120] },
+    trees: { palm: 1 }, treeDensity: .38, rocks: 0, lampsGlow: false,
+    traffic: { car: 34, taxi: 8, danfo: 26, brt: 6, keke: 10, okada: 10, tanker: 6 }, music: { bpm: 112, root: 45, prog: [0, 8, 3, 10] },
+  },
+  abuja: {
+    label: 'Abuja', slogan: 'Centre of Unity', sunElev: 16, sunAz: 240, turbidity: 8, rayleigh: 2, mie: .007,
+    sun: [0xffd9a0, 2.0], hemi: [0xe0e4ee, 0x56462f, .34], fog: [0xd8c7a8, 420, 2800], exposure: .78,
+    palette: ['#f5f2ea', '#efe6d5', '#e0e7e9', '#f3ead8', '#d8d0c0', '#c9d6c0', '#e8dcc4'],
+    glass: ['#c9dbe6', '#b8d0c9', '#d6dde3'], ground: { land: [128, 122, 82], green: [86, 120, 58], shore: [170, 150, 112] },
+    trees: { round: .55, palm: .15, acacia: .3 }, treeDensity: .45, rocks: .5, lampsGlow: false,
+    traffic: { car: 40, taxi: 24, danfo: 10, keke: 8, okada: 4, tanker: 8, brt: 6 }, music: { bpm: 104, root: 43, prog: [0, 5, 8, 7] },
+  },
+  ph: {
+    label: 'Port Harcourt', slogan: 'Treasure Base of the Nation', sunElev: 42, sunAz: 200, turbidity: 12, rayleigh: 3.6, mie: .012,
+    sun: [0xe8eef5, 1.3], hemi: [0xc8d2dc, 0x3d4a3a, .42], fog: [0x8d9aa3, 300, 1800], exposure: .74,
+    palette: ['#e0d4c0', '#c9d6df', '#f0c9a0', '#d0e0c0', '#e6e0d6', '#bfc8c0', '#d9c2a6'],
+    glass: ['#a9bccb', '#9fb3b0'], ground: { land: [98, 116, 76], green: [58, 102, 50], shore: [150, 140, 108] },
+    trees: { palm: .7, round: .3 }, treeDensity: .5, rocks: 0, lampsGlow: false,
+    traffic: { tanker: 14, car: 32, keke: 22, danfo: 16, okada: 12, taxi: 4 }, music: { bpm: 108, root: 47, prog: [0, 10, 8, 7] },
+  },
+  kano: {
+    label: 'Kano', slogan: 'Centre of Commerce', sunElev: 30, sunAz: 230, turbidity: 18, rayleigh: 4, mie: .02,
+    sun: [0xfff0d8, 1.5], hemi: [0xe8dcc8, 0x6a5238, .42], fog: [0xd9c3a0, 160, 950], exposure: .8,
+    palette: ['#c98a5a', '#b8774a', '#d49a68', '#e0c4a0', '#cfa57a', '#e6d2b0', '#bf8e60'],
+    glass: ['#c8c0b0'], ground: { land: [196, 164, 118], green: [130, 128, 70], shore: [200, 176, 130] },
+    trees: { acacia: .8, palm: .2 }, treeDensity: .25, rocks: .1, lampsGlow: false,
+    traffic: { car: 26, keke: 30, okada: 16, tanker: 10, danfo: 8, taxi: 10 }, music: { bpm: 98, root: 50, prog: [0, 10, 7, 10] },
+  },
+  enugu: {
+    label: 'Enugu', slogan: 'Coal City State', sunElev: 7, sunAz: 262, turbidity: 12, rayleigh: 3.2, mie: .01,
+    sun: [0xff9a50, 1.5], hemi: [0x8a7ab0, 0x3a2a20, .38], fog: [0x8a6a6c, 260, 1700], exposure: .66,
+    palette: ['#cfc6b8', '#b8c4cc', '#d8b8a0', '#d7ccc8', '#ffe0b2'],
+    glass: ['#b0a8b8'], ground: { land: [96, 104, 70], green: [64, 92, 48], shore: [130, 120, 96] },
+    trees: { round: .8, palm: .2 }, treeDensity: .65, rocks: .35, lampsGlow: true,
+    traffic: { car: 34, keke: 24, okada: 14, danfo: 14, tanker: 10, taxi: 4 }, music: { bpm: 106, root: 44, prog: [0, 8, 3, 10] },
+  },
+  ekiti: {
+    label: 'Ekiti', slogan: 'Fountain of Knowledge', sunElev: 13, sunAz: 120, turbidity: 9, rayleigh: 2.4, mie: .009,
+    sun: [0xffe8c8, 1.8], hemi: [0xd6e6dc, 0x40502e, .45], fog: [0xcfdccf, 200, 1300], exposure: .85,
+    palette: ['#fff3e0', '#e3f2fd', '#f1f8e9', '#fce4ec', '#e8dcc4'],
+    glass: ['#c0d0c8'], ground: { land: [90, 120, 64], green: [58, 104, 44], shore: [140, 130, 100] },
+    trees: { round: .8, palm: .2 }, treeDensity: .75, rocks: .6, lampsGlow: false,
+    traffic: { car: 34, okada: 30, keke: 20, danfo: 8, tanker: 8 }, music: { bpm: 102, root: 48, prog: [0, 8, 10, 7] },
+  },
+  calabar: {
+    label: 'Calabar', slogan: 'The Canaan City', sunElev: 28, sunAz: 200, turbidity: 7, rayleigh: 1.8, mie: .006,
+    sun: [0xfff0d8, 2.0], hemi: [0xd0e4f0, 0x40503a, .4], fog: [0xb4c8cf, 320, 2200], exposure: .82,
+    palette: ['#f2ead8', '#ffffff', '#cfe0ea', '#e6c4b0', '#d8e8d0', '#f0dcc0'],
+    glass: ['#b9d4e3', '#a8c9c0'], ground: { land: [104, 126, 78], green: [58, 110, 48], shore: [176, 160, 120] },
+    trees: { palm: .6, round: .4 }, treeDensity: .5, rocks: 0, lampsGlow: false,
+    traffic: { car: 40, taxi: 14, keke: 20, okada: 10, danfo: 10, tanker: 6 }, music: { bpm: 104, root: 46, prog: [0, 8, 3, 10] },
+  },
+};
+export const CITY_ORDER = ['lagos', 'abuja', 'ph', 'kano', 'enugu', 'ekiti', 'calabar'];

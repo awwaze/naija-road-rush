@@ -9,6 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor-firebase/authentication": "^8.6.0",
+    "@capacitor/core": "^8.6.2",
+    "firebase": "^12.19.0",
     "three": "^0.187.0"
   },
   "devDependencies": {

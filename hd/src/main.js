@@ -5,6 +5,8 @@ import { CARS, buildCar, buildGlbCar, preloadGlb, trafficModels, TRAFFIC_MIX, TR
 import { AudioSys } from './audio.js';
 import { ROAD } from './textures.js';
 import { createPost, Particles, SkidMarks, rampMesh } from './fx.js';
+import { Account } from './account.js';
+import { THEMES, CITY_ORDER } from './themes.js';
 
 const $ = id => document.getElementById(id);
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
@@ -16,7 +18,7 @@ const KMH = 3.6 / SPEED_SCALE;
 const SAVE_KEY = 'nrrHD.v1';
 const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0 } };
 let save = (() => { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d) return { ...DEF, ...d, settings: { ...DEF.settings, ...(d.settings || {}) } }; } catch (e) { } return JSON.parse(JSON.stringify(DEF)); })();
-const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } };
+const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } try { Account.queueSave(save); } catch (e) { } };
 AudioSys.settings = save.settings;
 
 // ---------------------------------------------------------------- renderer
@@ -40,15 +42,20 @@ function resize() {
   for (const pt of [sparks, smoke, flames]) pt.setScale(innerHeight * renderer.getPixelRatio());
 }
 addEventListener('resize', resize); resize();
+// if the phone's GPU drops the WebGL context (low memory), recover by reloading the game
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); setTimeout(() => location.reload(), 600); });
 
 // ---------------------------------------------------------------- data
-let CITY = null; const groundImgs = {};
-async function loadCity() {
+let INDEX = null, CITY = null; const CITY_DATA = {}, groundImgs = {};
+async function loadIndex() { INDEX = await (await fetch('tracks/index.json')).json(); }
+async function loadCity(id) {
   const prog = p => { $('loadFill').style.width = (p * 100).toFixed(0) + '%'; };
-  prog(.1);
-  CITY = await (await fetch('tracks/lagos.json')).json(); prog(.4);
-  await Promise.all(CITY.routes.map(r => new Promise((res, rej) => { const im = new Image(); im.onload = () => { groundImgs[r.id] = im; res(); }; im.onerror = rej; im.src = 'tracks/' + r.ground.img; })));
-  prog(.6);
+  if (!CITY_DATA[id]) {
+    prog(.1); const data = await (await fetch(`tracks/${id}.json`)).json(); prog(.4);
+    await Promise.all(data.routes.map(r => new Promise((res, rej) => { const im = new Image(); im.onload = () => { groundImgs[id + '/' + r.id] = im; res(); }; im.onerror = rej; im.src = 'tracks/' + r.ground.img; })));
+    CITY_DATA[id] = data;
+  }
+  CITY = CITY_DATA[id]; CITY.id = id; prog(.6); return CITY;
 }
 
 // ---------------------------------------------------------------- input (buttons, keyboard, tilt)
@@ -89,7 +96,7 @@ const F = {}; const F2 = {};
 
 async function makeCar(spec, color) { if (spec.glb) { try { return await buildGlbCar(spec); } catch (e) { console.warn('GLB failed, using built-in model', e); } } return buildCar(spec, color); }
 function shine(model) {
-  model.group.traverse(o => { if (!o.isMesh) return; const m = o.material; if (model.glb && m.map) { m.envMap = G.world.env; m.envMapIntensity = 1.4; return; } if (m === model.paint) { m.envMap = G.world.env; m.envMapIntensity = 1.7; } else if (m.metalness > .8) { m.envMap = G.world.env; m.envMapIntensity = 1.5; } });
+  model.group.traverse(o => { if (!o.isMesh) return; const m = o.material; if (model.glb && m.map) { m.envMap = G.world.env; m.envMapIntensity = 1.0; return; } if (m === model.paint) { m.envMap = G.world.env; m.envMapIntensity = 1.15; } else if (m.metalness > .8) { m.envMap = G.world.env; m.envMapIntensity = 1.5; } });
 }
 function carStats(id) { const c = CARS.find(x => x.id === id) || CARS[0]; return c; }
 function place(obj, s, x, yaw = 0, roll = 0, reverse = false) {
@@ -108,11 +115,13 @@ function clearRace() {
   sparks.clear(); smoke.clear(); flames.clear(); skids.clear();
 }
 
-async function setupRoute(routeId, forMenu) {
-  clearRace();
-  const route = CITY.routes.find(r => r.id === routeId);
-  G.route = route; G.track = new Track(route);
-  G.world = buildWorld({ scene, renderer, track: G.track, route, groundImg: groundImgs[routeId], quality: save.settings.quality, onProgress: p => { $('loadFill').style.width = (60 + p * 40).toFixed(0) + '%'; } });
+async function setupRoute(cityId, routeId, forMenu) {
+  G.state = 'loading'; clearRace();
+  await loadCity(cityId);
+  const route = CITY.routes.find(r => r.id === routeId), theme = THEMES[cityId] || THEMES.lagos;
+  G.city = cityId; G.theme = theme; G.route = route; G.track = new Track(route);
+  renderer.toneMappingExposure = theme.exposure;
+  G.world = buildWorld({ scene, renderer, track: G.track, route, theme, groundImg: groundImgs[cityId + '/' + routeId], quality: save.settings.quality, onProgress: p => { $('loadFill').style.width = (60 + p * 40).toFixed(0) + '%'; } });
   if (!TM) TM = trafficModels();
   spawnTraffic(forMenu ? 26 : 40, forMenu ? 18 : 26);
 }
@@ -121,7 +130,7 @@ const RIVAL_INFO = [{ name: 'Tunde', car: 'lagoon', color: '#d32f2f' }, { name: 
 const LANES = [-3.6, 0, 3.6], OPP_LANES = [-9.2, -12.8, -16.4];
 
 function spawnTraffic(nSame, nOpp) {
-  const mix = TRAFFIC_MIX.lagos, keys = Object.keys(mix), tot = keys.reduce((a, k) => a + mix[k], 0);
+  const mix = G.theme.traffic, keys = Object.keys(mix), tot = keys.reduce((a, k) => a + mix[k], 0);
   const pickType = () => { let r = Math.random() * tot; for (const k of keys) { r -= mix[k]; if (r <= 0) return k; } return 'car'; };
   const mk = (opp) => { const type = pickType(), m = TM[type][Math.floor(Math.random() * TM[type].length)], mesh = new THREE.Mesh(m.geo, trafficMat); mesh.castShadow = save.settings.quality === 'high'; scene.add(mesh); const sp = TRAFFIC_SPEED[type];
     return { type, mesh, len: m.len, wid: m.wid, lane: Math.floor(Math.random() * 3), x: 0, s: 0, v: (sp[0] + Math.random() * (sp[1] - sp[0])) / KMH, phase: Math.random() * 6, opp }; };
@@ -130,10 +139,11 @@ function spawnTraffic(nSame, nOpp) {
   for (let i = 0; i < nOpp; i++) { const t = mk(true); t.s = Math.random() * L; t.x = OPP_LANES[t.lane]; G.opp.push(t); }
 }
 
-function startRace(routeId) {
-  show(null); $('loading').classList.remove('hidden'); $('loadTxt').textContent = 'Building ' + CITY.routes.find(r => r.id === routeId).name + '…'; $('loadFill').style.width = '60%';
+function startRace(cityId, routeId) {
+  const meta = INDEX[cityId].routes.find(r => r.id === routeId);
+  show(null); $('loading').classList.remove('hidden'); $('loadTxt').textContent = 'Building ' + INDEX[cityId].name + ': ' + meta.name + '…'; $('loadFill').style.width = '10%';
   setTimeout(async () => {
-    await setupRoute(routeId, false);
+    await setupRoute(cityId, routeId, false);
     const T = G.track;
     // player
     const spec = carStats(save.car), color = save.colors[spec.id] || spec.color;
@@ -149,10 +159,10 @@ function startRace(routeId) {
     Object.assign(G, { raceTime: 0, coinsRun: 0, nitro: .5, nitroOn: false, finished: false, place: 0, resultsShown: false, lastToast: {}, shake: 0, timeScale: 1, slowT: 0, takedowns: 0 });
     $('loading').classList.add('hidden');
     $('hud').classList.remove('hidden'); $('controls').classList.remove('hidden');
-    $('banner').innerHTML = `<h2>LAGOS</h2><p>${G.route.name}</p><div class="sub">${G.route.start} → ${G.route.end} · ${(T.length / 1000).toFixed(1)} km of real road</div>`; $('banner').style.opacity = 1;
+    $('banner').innerHTML = `<h2>${G.theme.label.toUpperCase()}</h2><p>${G.route.name}</p><div class="sub">${G.route.start} → ${G.route.end} · ${(T.length / 1000).toFixed(1)} km of real road</div>`; $('banner').style.opacity = 1;
     G.state = 'countdown'; G.cd = 3.6; G.cdShown = -1;
     if (save.settings.tilt && Input.tiltSeen && Math.abs(Input.tiltRaw) < 30) Input.tiltNeutral = Input.tiltRaw;
-    AudioSys.stop(); AudioSys.play(CITY_MUSIC, true);
+    AudioSys.stop(); AudioSys.play(G.theme.music, true);
     resetCam();
   }, 30);
 }
@@ -196,7 +206,7 @@ function updatePickups() {
 
 // ---------------------------------------------------------------- physics
 function update(dt) {
-  G.t += dt; const P = G.player, T = G.track;
+  G.t += dt; if (!G.world) return; const P = G.player, T = G.track;
   if (G.state === 'menu') { menuCamera(dt); moveTraffic(dt, null); G.world.update(T.idx(G.menuS), camera.position, dt); return; }
   if (!P) return;
   const racing = G.state === 'race';
@@ -429,30 +439,39 @@ function finish() {
 function results() {
   $('countdown').textContent = ''; $('hud').classList.add('hidden'); $('controls').classList.add('hidden');
   const prize = [0, 600, 360, 220, 80, 50, 30][G.place] || 30, total = prize + G.coinsRun;
-  save.coins += total; const key = G.route.id; const best = save.best[key]; const nb = G.place === 1 && (!best || G.raceTime < best); if (nb) save.best[key] = G.raceTime; persist();
+  save.coins += total; const key = G.city + '/' + G.route.id; const best = save.best[key]; const nb = G.place === 1 && (!best || G.raceTime < best); if (nb) save.best[key] = G.raceTime; persist();
   $('rTitle').textContent = ['', '1st Place!', '2nd Place', '3rd Place', '4th Place', '5th Place', '6th Place'][G.place];
   $('rSub').textContent = `${G.route.name} · ${fmt(G.raceTime)}`;
   $('rLines').innerHTML = [['Finishing position', G.place + ' of 6'], ['Time', fmt(G.raceTime) + (nb ? ' (new best!)' : '')], ['Prize money', '₦' + prize], ['Coins collected', '₦' + G.coinsRun], ['Total earned', '₦' + total]].map(([a, b]) => `<div class="ln"><span>${a}</span><b>${b}</b></div>`).join('');
   const btns = $('rBtns'); btns.innerHTML = '';
   const add = (t, c, fn) => { const b = document.createElement('button'); b.className = 'mbtn ' + c; b.textContent = t; b.onclick = fn; btns.appendChild(b); };
-  add('Race again', 'gold', () => startRace(G.route.id)); add('Other race', 'alt', () => { openRaces(); }); add('Garage', 'alt', () => openGarage()); add('Menu', 'alt', () => goMenu());
+  add('Race again', 'gold', () => startRace(G.city, G.route.id)); add('Other race', 'alt', () => { openRaces(); }); add('Garage', 'alt', () => openGarage()); add('Menu', 'alt', () => goMenu());
   show('sResults'); wallet();
 }
 function pause() { if (G.state !== 'race' && G.state !== 'countdown') return; G.prev = G.state; G.state = 'paused'; show('sPause'); AudioSys.setEngine(false, 0, false); }
 function resume() { if (G.state !== 'paused') return; show(null); G.state = G.prev || 'race'; }
 async function goMenu() {
   $('hud').classList.add('hidden'); $('controls').classList.add('hidden'); $('countdown').textContent = ''; $('banner').innerHTML = '';
-  if (!G.world || G.player || G.route.id !== 'bridge') { await setupRoute('bridge', true); }
+  if (!G.world || G.player || G.route.id !== 'bridge') { await setupRoute('lagos', 'bridge', true); }
   G.menuS = 300; G.state = 'menu'; show('sMenu'); wallet();
   AudioSys.stop(); AudioSys.play({ bpm: 100, root: 45, prog: [0, 8, 3, 10] }, false);
 }
+let raceCity = 'lagos';
 function openRaces() {
-  show('sRaces'); wallet(); const list = $('raceList'); list.innerHTML = '';
-  CITY.routes.forEach(r => {
-    const b = document.createElement('button'); b.className = 'race';
-    const best = save.best[r.id];
+  show('sRaces'); wallet();
+  const tabs = $('cityTabs'); tabs.innerHTML = '';
+  CITY_ORDER.forEach(id => {
+    const th = THEMES[id], ok = !!INDEX[id], b = document.createElement('button');
+    b.className = 'ctab' + (id === raceCity ? ' on' : '') + (ok ? '' : ' soon'); b.innerHTML = `${th.label}${ok ? '' : '<small>soon</small>'}`;
+    if (ok) b.onclick = () => { raceCity = id; openRaces(); }; tabs.appendChild(b);
+  });
+  const th = THEMES[raceCity]; $('raceCityTitle').textContent = th.label + ' · ' + th.slogan;
+  const list = $('raceList'); list.innerHTML = '';
+  INDEX[raceCity].routes.forEach(r => {
+    const b = document.createElement('button'); b.className = 'race'; b.style.background = `linear-gradient(160deg, #${th.fog[0].toString(16).padStart(6, '0')}, #0b3d5c 65%, #0a2a1c)`;
+    const best = save.best[raceCity + '/' + r.id];
     b.innerHTML = `${best ? `<span class="best">Best ${fmt(best)}</span>` : ''}<h4>${r.name}</h4><div class="d">${r.desc}</div><div class="m">${(r.length / 1000).toFixed(1)} km · ${r.start} → ${r.end}</div>`;
-    b.onclick = () => { AudioSys.unlock(); requestTilt(); startRace(r.id); }; list.appendChild(b);
+    b.onclick = () => { AudioSys.unlock(); requestTilt(); startRace(raceCity, r.id); }; list.appendChild(b);
   });
 }
 
@@ -488,14 +507,15 @@ $('gNext').onclick = () => { gIdx = (gIdx + 1) % CARS.length; renderGarage(); };
 function renderSettings() { document.querySelectorAll('[data-set]').forEach(b => b.classList.toggle('on', !!save.settings[b.dataset.set])); $('sens').value = save.settings.sens; document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === save.settings.quality)); }
 document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { const k = b.dataset.set; save.settings[k] = !save.settings[k]; persist(); renderSettings(); AudioSys.unlock(); AudioSys.applyVol(); if (k === 'tilt' && save.settings.tilt) { Input.tiltAsked = false; requestTilt(); } });
 $('sens').oninput = e => { save.settings.sens = parseFloat(e.target.value); persist(); };
-document.querySelectorAll('#qSeg button').forEach(b => b.onclick = async () => { save.settings.quality = b.dataset.q; persist(); renderSettings(); resize(); await setupRoute('bridge', true); G.state = 'menu'; show('sSettings'); });
+document.querySelectorAll('#qSeg button').forEach(b => b.onclick = async () => { save.settings.quality = b.dataset.q; persist(); renderSettings(); resize(); await setupRoute('lagos', 'bridge', true); G.state = 'menu'; show('sSettings'); });
 
 // ---------------------------------------------------------------- wiring
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { AudioSys.unlock(); const g = b.dataset.go;
   if (g === 'menu') { if (G.state === 'garage') { G.state = 'menu'; } show('sMenu'); wallet(); if (G.state !== 'menu') goMenu(); else AudioSys.play({ bpm: 100, root: 45, prog: [0, 8, 3, 10] }, false); }
+  else if (g === 'profile') { show('sProfile'); renderAccount(Account.profile); }
   else if (g === 'races') openRaces(); else if (g === 'garage') openGarage(); else if (g === 'settings') { show('sSettings'); renderSettings(); } }));
 $('btnPause').onclick = pause; $('btnCam').onclick = cycleCam;
-$('pResume').onclick = resume; $('pRestart').onclick = () => startRace(G.route.id); $('pQuit').onclick = () => goMenu();
+$('pResume').onclick = resume; $('pRestart').onclick = () => startRace(G.city, G.route.id); $('pQuit').onclick = () => goMenu();
 $('pCalib').onclick = () => { if (Input.tiltSeen) { Input.tiltNeutral = Input.tiltRaw; toast('Tilt calibrated', 'good'); } else toast('No tilt sensor detected', 'bad'); };
 if (NATIVE) {
   try { Plug.StatusBar && Plug.StatusBar.hide(); } catch (e) { }
@@ -525,8 +545,37 @@ function frame(now) {
     if (fps < 30 && renderer.getPixelRatio() > .75) { renderer.setPixelRatio(Math.max(.75, renderer.getPixelRatio() - .25)); renderer.setSize(innerWidth, innerHeight, false); } }
   if (G.state === 'race' || G.state === 'countdown' || G.state === 'finished') hud();
 }
-window.__NRRHD = { G, startRace, goMenu, save, CITY: () => CITY };
+// ---------------------------------------------------------------- accounts
+function applyCloudSave(remote, mergeGuest) {
+  const local = save;
+  const merged = { ...DEF, ...remote, settings: local.settings };
+  if (mergeGuest) { // keep the best of guest progress and the cloud profile
+    merged.coins = Math.max(local.coins || 0, remote.coins || 0);
+    merged.owned = [...new Set([...(remote.owned || []), ...(local.owned || [])])];
+    merged.best = { ...(remote.best || {}) }; for (const [k, v] of Object.entries(local.best || {})) if (!merged.best[k] || v < merged.best[k]) merged.best[k] = v;
+  }
+  save = merged; AudioSys.settings = save.settings; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { }
+  wallet();
+}
+function renderAccount(p) {
+  const name = p ? (p.isGuest ? 'Guest Racer' : p.name) : 'Guest Racer';
+  const initial = name.trim()[0] || '?';
+  for (const [av, big] of [[$('acctAv'), false], [$('pAv'), true]]) { if (p && p.photo && !p.isGuest) { av.style.backgroundImage = `url(${p.photo})`; av.textContent = ''; } else { av.style.backgroundImage = ''; av.textContent = initial.toUpperCase(); } }
+  $('acctName').textContent = name; $('pName').textContent = name;
+  $('acctSub').textContent = !Account.enabled ? 'Online accounts coming soon' : !p ? 'Connecting…' : p.isGuest ? `ID ${p.playerId || '…'} · Tap to sign in` : `ID ${p.playerId || '…'} · Cloud save on`;
+  $('pId').textContent = p && p.playerId ? p.playerId : '—';
+  $('pStat').textContent = !Account.enabled ? 'Accounts will switch on in the next update.' : !p ? 'Connecting…' : p.isGuest ? 'Playing as a guest. Progress is saved on this phone and backed up to your guest profile.' : 'Signed in with Google. Progress is saved to the cloud.';
+  $('pGoogle').style.display = (Account.enabled && (!p || p.isGuest)) ? '' : 'none';
+  $('pOut').style.display = (p && !p.isGuest) ? '' : 'none';
+}
+Account.onChange(renderAccount);
+$('pGoogle').onclick = async () => { try { $('pGoogle').disabled = true; await Account.signInWithGoogle(); toast('Signed in — progress saved to the cloud', 'good'); } catch (e) { toast('Sign-in failed: ' + (e.message || e).toString().slice(0, 60), 'bad'); } finally { $('pGoogle').disabled = false; } };
+$('pOut').onclick = async () => { await Account.flushNow().catch(() => { }); await Account.signOut(); toast('Signed out', 'gold'); };
+$('pCopy').onclick = async () => { const id = $('pId').textContent; try { await navigator.clipboard.writeText(id); toast('Player ID copied', 'good'); } catch (e) { toast('ID: ' + id, 'gold'); } };
+Account.init(() => save, applyCloudSave).catch(e => console.warn('accounts unavailable', e));
+
+window.__NRRHD = { G, startRace, goMenu, save, CITY: () => CITY, INDEX: () => INDEX, camera, renderer, scene, getPost: () => post };
 (async () => {
-  try { await loadCity(); await goMenu(); $('loading').classList.add('hidden'); requestAnimationFrame(frame); }
+  try { await loadIndex(); await goMenu(); $('loading').classList.add('hidden'); requestAnimationFrame(frame); }
   catch (e) { $('loadTxt').textContent = 'Could not load: ' + e.message; console.error(e); }
 })();

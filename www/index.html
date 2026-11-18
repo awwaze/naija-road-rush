@@ -8,8 +8,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Naija Road Rush HD</title>
 <link rel="stylesheet" href="./fonts/fonts.css">
-  <script type="module" crossorigin src="./assets/index-ZTZ9NRlj.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-BToGy1Jf.css">
+  <script type="module" crossorigin src="./assets/index-D-fzJvDc.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-nafXjBXH.css">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -51,22 +51,25 @@
 <div id="screens">
   <div class="screen hidden" id="sMenu">
     <div class="menuwrap">
+      <button class="acct" id="acct" data-go="profile"><span class="av" id="acctAv">?</span><span class="an"><b id="acctName">Guest</b><small id="acctSub">Tap to sign in</small></span></button>
       <div class="logo"><div class="a">NAIJA</div><div class="b">ROAD RUSH <span class="hd">HD</span></div></div>
-      <div class="tag">Real Lagos roads, built from real map data</div>
+      <div class="tag">Real Nigerian roads, built from real map data</div>
       <div class="wallet center">₦ <span class="wv">0</span></div>
       <div class="grid">
-        <button class="mbtn gold" data-go="races">Race<small>Lagos · 2 real routes</small></button>
+        <button class="mbtn gold" data-go="races">Race<small>Real roads in Nigerian cities</small></button>
         <button class="mbtn alt" data-go="garage">Garage<small>Cars &amp; paint</small></button>
         <button class="mbtn alt" data-go="settings">Settings<small>Tilt, sound, graphics</small></button>
         <a class="mbtn alt" href="classic/index.html">Classic<small>6-city 2D version</small></a>
       </div>
-      <div class="soon">Coming next: Google login · daily rewards · online races · more cities: Abuja, Port Harcourt, Kano, Calabar, Ibadan, Enugu, Benin, Jos, Ekiti</div>
+      <div class="soon">Coming next: daily rewards · online races · more cities: Ibadan, Benin, Jos</div>
     </div>
   </div>
 
   <div class="screen hidden" id="sRaces">
     <div class="panel">
-      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Lagos</h3><span class="wallet">₦ <span class="wv">0</span></span></div>
+      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Choose a city</h3><span class="wallet">₦ <span class="wv">0</span></span></div>
+      <div class="ctabs" id="cityTabs"></div>
+      <div class="ccity" id="raceCityTitle"></div>
       <div class="races" id="raceList"></div>
       <div class="hint">You vs 5 rivals on real roads. Dodge danfos, kekes and okadas · grab ₦ coins and N₂O.</div>
     </div>
@@ -81,6 +84,18 @@
         <button class="navb" id="gNext">▶</button>
       </div>
       <div class="btnrow"><button class="mbtn gold" id="gBuy">Buy</button></div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="sProfile">
+    <div class="panel narrow center">
+      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Profile</h3><span></span></div>
+      <div class="pav" id="pAv">?</div>
+      <div class="pname" id="pName">Guest Racer</div>
+      <div class="pid">Player ID <b id="pId">—</b> <button class="sbtn" id="pCopy">Copy</button></div>
+      <div class="pstat" id="pStat"></div>
+      <div class="btnrow"><button class="mbtn gold" id="pGoogle"><span class="g">G</span> Sign in with Google</button><button class="mbtn alt" id="pOut">Sign out</button></div>
+      <div class="hint" id="pHint">Sign in with Google to save your cars and coins to the cloud and use them on any phone. Friends will add you by your Player ID.</div>
     </div>
   </div>
 

@@ -1,0 +1,62 @@
+{
+ "lagos": {
+  "name": "Lagos",
+  "routes": [
+   {
+    "id": "bridge",
+    "name": "Third Mainland Bridge",
+    "desc": "Cross the lagoon on one of the longest bridges in Africa",
+    "start": "Oworonshoki",
+    "end": "Adeniji Adele",
+    "length": 10420
+   },
+   {
+    "id": "lekki",
+    "name": "Victoria Island to Lekki Toll Gate",
+    "desc": "Ahmadu Bello Way, Ozumba Mbadiwe Avenue and the Lekki-Epe Expressway",
+    "start": "Ahmadu Bello Way",
+    "end": "Lekki Toll Gate",
+    "length": 6352
+   }
+  ]
+ },
+ "abuja": {
+  "name": "Abuja",
+  "routes": [
+   {
+    "id": "zuma",
+    "name": "Zuma Rock Expressway",
+    "desc": "The Abuja\u2013Kaduna Highway, right past the giant Zuma Rock",
+    "start": "Madalla",
+    "end": "Zuma Rock",
+    "length": 7648
+   }
+  ]
+ },
+ "ph": {
+  "name": "Port Harcourt",
+  "routes": [
+   {
+    "id": "garrison",
+    "name": "Ikwerre Road to Garrison",
+    "desc": "Rumuokoro, Rumuola and down Garrison Road through the Garden City",
+    "start": "Rumuokoro",
+    "end": "Garrison",
+    "length": 10732
+   }
+  ]
+ },
+ "enugu": {
+  "name": "Enugu",
+  "routes": [
+   {
+    "id": "milliken",
+    "name": "Milliken Hill Climb",
+    "desc": "Climb the Udi escarpment out of the Coal City",
+    "start": "Enugu",
+    "end": "Udi Hills",
+    "length": 8104
+   }
+  ]
+ }
+}

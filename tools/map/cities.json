@@ -36,5 +36,72 @@
     "end_name": "Lekki Toll Gate"
    }
   ]
+ },
+ "abuja": {
+  "name": "Abuja",
+  "hilly": true,
+  "routes": [
+   {
+    "raw": "abuja-zuma",
+    "id": "zuma",
+    "name": "Zuma Rock Expressway",
+    "desc": "The Abuja\u2013Kaduna Highway, right past the giant Zuma Rock",
+    "slices": [
+     [
+      5.5,
+      13.6
+     ]
+    ],
+    "start_name": "Madalla",
+    "end_name": "Zuma Rock",
+    "landmarks": [
+     {
+      "type": "zuma",
+      "lat": 9.1305399,
+      "lon": 7.2349144
+     }
+    ]
+   }
+  ]
+ },
+ "ph": {
+  "name": "Port Harcourt",
+  "hilly": false,
+  "routes": [
+   {
+    "raw": "ph",
+    "id": "garrison",
+    "name": "Ikwerre Road to Garrison",
+    "desc": "Rumuokoro, Rumuola and down Garrison Road through the Garden City",
+    "slices": [
+     [
+      0.4,
+      11.3
+     ]
+    ],
+    "start_name": "Rumuokoro",
+    "end_name": "Garrison"
+   }
+  ]
+ },
+ "enugu": {
+  "name": "Enugu",
+  "hilly": true,
+  "routes": [
+   {
+    "raw": "enugu",
+    "id": "milliken",
+    "name": "Milliken Hill Climb",
+    "desc": "Climb the Udi escarpment out of the Coal City",
+    "slices": [
+     [
+      8.6,
+      16.9
+     ]
+    ],
+    "start_name": "Enugu",
+    "end_name": "Udi Hills"
+   }
+  ]
  }
 }

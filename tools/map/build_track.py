@@ -337,6 +337,7 @@ def build_route(rt):
         'buildings': out_b,
         'pois': out_p,
         'ground': {'img': f"{CITY}-{rt['id']}.png", 'minx': round(gminx, 1), 'minz': round(gminz, 1), 'w': round(W_m, 1), 'h': round(H_m, 1)},
+        'landmarks': [dict(l, x=round(proj(l['lat'], l['lon'])[0], 1), z=round(proj(l['lat'], l['lon'])[1], 1)) for l in rt.get('landmarks', [])],
         '_stats': {'points': n, 'buildings': len(out_b), 'pois': len(out_p), 'bridge_pts': sum(flag), 'land_frac': round(land_px, 3), 'px': [Wp, Hp]},
     }
 
@@ -348,4 +349,9 @@ for rt in ROUTES:
     result['routes'].append(r)
 with open(f'{OUT}/{CITY}.json', 'w') as f:
     json.dump(result, f, separators=(',', ':'))
+idx_path = f'{OUT}/index.json'
+try: idx = json.load(open(idx_path))
+except Exception: idx = {}
+idx[CITY] = {'name': CONF['name'], 'routes': [{k: r[k] for k in ('id', 'name', 'desc', 'start', 'end', 'length')} for r in result['routes']]}
+json.dump(idx, open(idx_path, 'w'), indent=1)
 print('wrote', f'{OUT}/{CITY}.json', round(os.path.getsize(f'{OUT}/{CITY}.json') / 1e6, 2), 'MB')

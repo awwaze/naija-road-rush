@@ -29,7 +29,11 @@ const SpeedShader = {
 export function createPost(renderer, scene, camera) {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), .12, .35, 2.2); composer.addPass(bloom);
+  // clamp extreme HDR values (the sky's sun disc) so bloom can't overflow into Inf/NaN (black/white frames)
+  composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (!(c.r == c.r) || !(c.g == c.g) || !(c.b == c.b)) c = vec4(1.0); gl_FragColor = vec4(clamp(c.rgb, 0.0, 12.0), 1.0); }' }));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), .07, .3, 3.2); composer.addPass(bloom);
   const speed = new ShaderPass(SpeedShader); composer.addPass(speed);
   composer.addPass(new OutputPass());
   return {

@@ -111,7 +111,7 @@ export function waterNormal() {
 }
 
 // Turns the land/water/green mask (R = land, G = parks) into a coloured ground map + alpha (land only)
-export function groundFromMask(img) {
+export function groundFromMask(img, C = { land: [128, 122, 96], green: [62, 110, 48], shore: [176, 160, 120] }) {
   const s = Math.min(1, 2048 / Math.max(img.width, img.height));
   const W = Math.round(img.width * s), H = Math.round(img.height * s);
   const [mc, mg] = canvas(W, H); mg.drawImage(img, 0, 0, W, H);
@@ -125,9 +125,9 @@ export function groundFromMask(img) {
     const n = (r() - .5) * 22, n2 = Math.sin(x * .05) * Math.cos(y * .045) * 10;
     let R, G, B;
     if (!L) { R = 30; G = 70; B = 80; }
-    else if (shore) { R = 176 + n; G = 160 + n; B = 120 + n; }
-    else if (green) { R = 62 + n + n2; G = 110 + n + n2; B = 48 + n; }
-    else { R = 128 + n + n2; G = 122 + n + n2; B = 96 + n; }
+    else if (shore) { R = C.shore[0] + n; G = C.shore[1] + n; B = C.shore[2] + n; }
+    else if (green) { R = C.green[0] + n + n2; G = C.green[1] + n + n2; B = C.green[2] + n; }
+    else { R = C.land[0] + n + n2; G = C.land[1] + n + n2; B = C.land[2] + n; }
     col.data[o] = R; col.data[o + 1] = G; col.data[o + 2] = B; col.data[o + 3] = 255;
     const a = L ? 255 : 0; al.data[o] = al.data[o + 1] = al.data[o + 2] = a; al.data[o + 3] = 255;
   }
