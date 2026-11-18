@@ -1,3 +1,10 @@
 [
-  { "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_190529_f4e32cc7-6e84-4aad-b8a7-0d7a2983327b.glb", "out": "hd/public/models/test-ai-supercar.glb" }
+ {
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_190529_f4e32cc7-6e84-4aad-b8a7-0d7a2983327b.glb",
+  "out": "hd/public/models/test-ai-supercar.glb"
+ },
+ {
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_221024_b9c06189-c8e2-430c-8258-4ec7901f12e1.glb",
+  "out": "hd/public/models/raw/corona-sam3d.glb"
+ }
 ]
