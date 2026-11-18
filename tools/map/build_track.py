@@ -205,6 +205,7 @@ def build_route(rt):
             j = min(range(len(raw)), key=lambda i: math.dist(raw[i], s[0]))
             raw = raw[:j]
         raw += s
+    if rt.get('reverse'): raw = raw[::-1]   # drive the route the other way
     pts = resample(raw, 2.0)
     pts = smooth(pts, 18)          # +-36 m: rounds junction corners for racing
     pts = smooth(pts, 10)
@@ -226,8 +227,14 @@ def build_route(rt):
         return 0 <= x < Wp and 0 <= z < Hp and lp[x, z] < 128
     # bridge flags + deck height
     flag = []
-    for p in pts:
-        on = any(seg_dist(p, br[k], br[k + 1]) < 14 for br in bridges for k in range(len(br) - 1)
+    def parallel(i, a, b):
+        # a bridge only carries OUR road if it runs along it; flyovers crossing over us don't count
+        q0, q1 = pts[max(0, i - 3)], pts[min(n - 1, i + 3)]
+        tx, tz = q1[0] - q0[0], q1[1] - q0[1]; bx, bz = b[0] - a[0], b[1] - a[1]
+        lt, lb = math.hypot(tx, tz), math.hypot(bx, bz)
+        return lt > 0 and lb > 0 and abs(tx * bx + tz * bz) / (lt * lb) > 0.8
+    for i, p in enumerate(pts):
+        on = any(seg_dist(p, br[k], br[k + 1]) < 14 and parallel(i, br[k], br[k + 1]) for br in bridges for k in range(len(br) - 1)
                  if abs(br[k][0] - p[0]) < 400 and abs(br[k][1] - p[1]) < 400)
         flag.append(1 if (on or over_water(p)) else 0)
     # close gaps shorter than 400 m between bridge stretches, drop bridge blips under 40 m

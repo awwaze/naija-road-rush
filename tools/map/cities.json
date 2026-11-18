@@ -61,6 +61,20 @@
       "lon": 7.2349144
      }
     ]
+   },
+   {
+    "raw": "abuja-gate",
+    "id": "gate",
+    "name": "Airport Expressway to Constitution Avenue",
+    "desc": "Umaru Musa Yar'Adua Expressway into the Central Area of the capital",
+    "slices": [
+     [
+      5.75,
+      15.0
+     ]
+    ],
+    "start_name": "Airport Expressway",
+    "end_name": "Central Area"
    }
   ]
  },
@@ -101,6 +115,74 @@
     ],
     "start_name": "Enugu",
     "end_name": "Udi Hills"
+   }
+  ]
+ },
+ "kano": {
+  "name": "Kano",
+  "hilly": false,
+  "routes": [
+   {
+    "raw": "kano",
+    "id": "nassarawa",
+    "name": "Airport Road to Kofar Nassarawa",
+    "desc": "From Aminu Kano Airport through Bompai to the ancient city gate",
+    "slices": [
+     [
+      0.0,
+      10.75
+     ]
+    ],
+    "start_name": "Aminu Kano Airport",
+    "end_name": "Kofar Nassarawa",
+    "landmarks": [
+     {
+      "type": "kofa",
+      "lat": 11.9908895,
+      "lon": 8.5306777
+     }
+    ],
+    "reverse": true
+   }
+  ]
+ },
+ "ekiti": {
+  "name": "Ekiti",
+  "hilly": true,
+  "routes": [
+   {
+    "raw": "ekiti",
+    "id": "ikogosi",
+    "name": "Road to Ikogosi Hills",
+    "desc": "Winding through the green Ekiti hills to the warm springs",
+    "slices": [
+     [
+      -9,
+      0
+     ]
+    ],
+    "start_name": "Ilawe Road",
+    "end_name": "Ikogosi"
+   }
+  ]
+ },
+ "calabar": {
+  "name": "Calabar",
+  "hilly": false,
+  "routes": [
+   {
+    "raw": "calabar",
+    "id": "marina",
+    "name": "Murtala Mohammed Highway to Marina",
+    "desc": "Calabar's clean palm-lined highway down to the Marina Resort",
+    "slices": [
+     [
+      0.15,
+      7.0
+     ]
+    ],
+    "start_name": "Ndidem Usong Iso",
+    "end_name": "Marina Resort"
    }
   ]
  }

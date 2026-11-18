@@ -25,8 +25,8 @@ export const THEMES = {
     traffic: { tanker: 14, car: 32, keke: 22, danfo: 16, okada: 12, taxi: 4 }, music: { bpm: 108, root: 47, prog: [0, 10, 8, 7] },
   },
   kano: {
-    label: 'Kano', slogan: 'Centre of Commerce', sunElev: 30, sunAz: 230, turbidity: 18, rayleigh: 4, mie: .02,
-    sun: [0xfff0d8, 1.5], hemi: [0xe8dcc8, 0x6a5238, .42], fog: [0xd9c3a0, 160, 950], exposure: .8,
+    label: 'Kano', slogan: 'Centre of Commerce', sunElev: 24, env: .3, sunAz: 200, turbidity: 9, rayleigh: 2.2, mie: .01,
+    sun: [0xffe6c4, 1.25], hemi: [0xd8ccb8, 0x6a5238, .36], fog: [0xb89e7c, 380, 2400], exposure: .72,
     palette: ['#c98a5a', '#b8774a', '#d49a68', '#e0c4a0', '#cfa57a', '#e6d2b0', '#bf8e60'],
     glass: ['#c8c0b0'], ground: { land: [196, 164, 118], green: [130, 128, 70], shore: [200, 176, 130] },
     trees: { acacia: .8, palm: .2 }, treeDensity: .25, rocks: .1, lampsGlow: false,
@@ -49,8 +49,8 @@ export const THEMES = {
     traffic: { car: 34, okada: 30, keke: 20, danfo: 8, tanker: 8 }, music: { bpm: 102, root: 48, prog: [0, 8, 10, 7] },
   },
   calabar: {
-    label: 'Calabar', slogan: 'The Canaan City', sunElev: 28, sunAz: 200, turbidity: 7, rayleigh: 1.8, mie: .006,
-    sun: [0xfff0d8, 2.0], hemi: [0xd0e4f0, 0x40503a, .4], fog: [0xb4c8cf, 320, 2200], exposure: .82,
+    label: 'Calabar', slogan: 'The Canaan City', sunElev: 22, env: .36, sunAz: 60, turbidity: 7, rayleigh: 1.8, mie: .006,
+    sun: [0xfff0d8, 1.5], hemi: [0xd0e4f0, 0x40503a, .36], fog: [0x9fb6bf, 420, 2600], exposure: .74,
     palette: ['#f2ead8', '#ffffff', '#cfe0ea', '#e6c4b0', '#d8e8d0', '#f0dcc0'],
     glass: ['#b9d4e3', '#a8c9c0'], ground: { land: [104, 126, 78], green: [58, 110, 48], shore: [176, 160, 120] },
     trees: { palm: .6, round: .4 }, treeDensity: .5, rocks: 0, lampsGlow: false,

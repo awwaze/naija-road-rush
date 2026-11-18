@@ -124,6 +124,8 @@ async function setupRoute(cityId, routeId, forMenu) {
   G.world = buildWorld({ scene, renderer, track: G.track, route, theme, groundImg: groundImgs[cityId + '/' + routeId], quality: save.settings.quality, onProgress: p => { $('loadFill').style.width = (60 + p * 40).toFixed(0) + '%'; } });
   if (!TM) TM = trafficModels();
   spawnTraffic(forMenu ? 26 : 40, forMenu ? 18 : 26);
+  // compile every material's shader now (during loading) so far-off scenery doesn't stutter when it first appears
+  try { const hidden = []; G.world.group.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } }); renderer.compile(scene, camera); hidden.forEach(o => { o.visible = false; }); } catch (e) { }
 }
 
 const RIVAL_INFO = [{ name: 'Tunde', car: 'lagoon', color: '#d32f2f' }, { name: 'Chioma', car: 'aso', color: '#8e24aa' }, { name: 'Musa', car: 'mercer', color: '#fb8c00' }, { name: 'Ngozi', car: 'spirit', color: '#00acc1' }, { name: 'Emeka', car: 'corona', color: '#43a047' }];

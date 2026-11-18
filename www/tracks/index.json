@@ -30,6 +30,14 @@
     "start": "Madalla",
     "end": "Zuma Rock",
     "length": 7648
+   },
+   {
+    "id": "gate",
+    "name": "Airport Expressway to Constitution Avenue",
+    "desc": "Umaru Musa Yar'Adua Expressway into the Central Area of the capital",
+    "start": "Airport Expressway",
+    "end": "Central Area",
+    "length": 9160
    }
   ]
  },
@@ -56,6 +64,45 @@
     "start": "Enugu",
     "end": "Udi Hills",
     "length": 8104
+   }
+  ]
+ },
+ "kano": {
+  "name": "Kano",
+  "routes": [
+   {
+    "id": "nassarawa",
+    "name": "Airport Road to Kofar Nassarawa",
+    "desc": "From Aminu Kano Airport through Bompai to the ancient city gate",
+    "start": "Aminu Kano Airport",
+    "end": "Kofar Nassarawa",
+    "length": 10500
+   }
+  ]
+ },
+ "ekiti": {
+  "name": "Ekiti",
+  "routes": [
+   {
+    "id": "ikogosi",
+    "name": "Road to Ikogosi Hills",
+    "desc": "Winding through the green Ekiti hills to the warm springs",
+    "start": "Ilawe Road",
+    "end": "Ikogosi",
+    "length": 8844
+   }
+  ]
+ },
+ "calabar": {
+  "name": "Calabar",
+  "routes": [
+   {
+    "id": "marina",
+    "name": "Murtala Mohammed Highway to Marina",
+    "desc": "Calabar's clean palm-lined highway down to the Marina Resort",
+    "start": "Ndidem Usong Iso",
+    "end": "Marina Resort",
+    "length": 6612
    }
   ]
  }

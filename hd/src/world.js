@@ -73,7 +73,8 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
   u.sunPosition.value.copy(sunDir);
   const pmrem = new THREE.PMREMGenerator(renderer); const skyScene = new THREE.Scene(); const sky2 = new Sky(); sky2.scale.setScalar(450); Object.assign(sky2.material.uniforms.sunPosition.value, sunDir);
   for (const k of ['turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG']) sky2.material.uniforms[k].value = u[k].value;
-  skyScene.add(sky2); const env = pmrem.fromScene(skyScene, 0, 0.1, 1000).texture; scene.environment = env; scene.environmentIntensity = 0.55; keep(env);
+  sky2.material.uniforms.showSunDisc.value = 0; // no sun disc in reflections: it made roads glare white when driving toward the sun
+  skyScene.add(sky2); const env = pmrem.fromScene(skyScene, 0, 0.1, 1000).texture; scene.environment = env; scene.environmentIntensity = TH.env ?? 0.55; // high-sun cities get a dimmer sky reflection or roads wash out keep(env);
   group.add(sky);
   scene.fog = new THREE.Fog(TH.fog[0], TH.fog[1], high ? TH.fog[2] : Math.min(1400, TH.fog[2]));
   const hemi = new THREE.HemisphereLight(TH.hemi[0], TH.hemi[1], TH.hemi[2]); group.add(hemi);
@@ -284,6 +285,45 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
       const rock = new THREE.Mesh(g, keep(new THREE.MeshStandardMaterial({ map: t, roughness: .92 })));
       rock.scale.set(520, 300, 440); rock.position.set(lm.x, terrainAt(lm.x, lm.z) - 2, lm.z); rock.rotation.y = .6; group.add(rock);
     }
+    if (lm.type === 'kofa') {
+      // Kofar Nassarawa: a Hausa earthen city gate (twin towers, arched passage, zanko horns, relief patterns).
+      // Placed beside the road, facing it, at the nearest track point to the real monument.
+      let bi = 0, bd = 1e18;
+      for (let i = 0; i < n; i++) { const dx = track.P[i * 3] - lm.x, dz = track.P[i * 3 + 2] - lm.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = i; } }
+      const nx = track.N[bi * 2], nz = track.N[bi * 2 + 1];
+      const side = ((lm.x - track.P[bi * 3]) * nx + (lm.z - track.P[bi * 3 + 2]) * nz) >= 0 ? 1 : -1;
+      const d = side > 0 ? R.R + 16 : R.L - 16; // lateral offset from centreline (R.L is the left edge, negative)
+      const gx = track.P[bi * 3] + nx * d, gz = track.P[bi * 3 + 2] + nz * d;
+      const c = document.createElement('canvas'); c.width = 512; c.height = 512; const cx = c.getContext('2d'), rr = rnd(77);
+      cx.fillStyle = '#b8794a'; cx.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < 4000; i++) { cx.fillStyle = `rgba(${90 + rr() * 60},${50 + rr() * 30},${25 + rr() * 20},${rr() * .18})`; cx.fillRect(rr() * 512, rr() * 512, 2 + rr() * 6, 2 + rr() * 6); }
+      // Hausa relief motifs (interlace knots and chevrons) in raised, lighter plaster
+      cx.strokeStyle = 'rgba(232,196,150,.85)'; cx.lineWidth = 7;
+      for (let k = 0; k < 4; k++) { const ox = 64 + (k % 2) * 256, oy = 70 + Math.floor(k / 2) * 230; cx.beginPath(); cx.arc(ox + 64, oy + 64, 52, 0, Math.PI * 2); cx.stroke(); cx.strokeRect(ox + 28, oy + 28, 72, 72); cx.beginPath(); cx.moveTo(ox, oy + 64); cx.lineTo(ox + 128, oy + 64); cx.moveTo(ox + 64, oy); cx.lineTo(ox + 64, oy + 128); cx.stroke(); }
+      cx.lineWidth = 6; for (let x = 0; x < 512; x += 40) { cx.beginPath(); cx.moveTo(x, 478); cx.lineTo(x + 20, 456); cx.lineTo(x + 40, 478); cx.stroke(); }
+      const tex = keep(new THREE.CanvasTexture(c)); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      const mMud = keep(new THREE.MeshStandardMaterial({ map: tex, roughness: .97 }));
+      const mDark = keep(new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 1 }));
+      const g = new THREE.Group();
+      const towerGeo = keep(new THREE.CylinderGeometry(3.4, 4.6, 16, 4, 1)); towerGeo.rotateY(Math.PI / 4);
+      const hornGeo = keep(new THREE.ConeGeometry(.55, 2.4, 6));
+      for (const sx of [-8, 8]) {
+        const t = new THREE.Mesh(towerGeo, mMud); t.position.set(sx, 8, 0); t.castShadow = t.receiveShadow = high; g.add(t);
+        for (const [hx, hz] of [[-2.6, -2.6], [2.6, -2.6], [-2.6, 2.6], [2.6, 2.6]]) { const h = new THREE.Mesh(hornGeo, mMud); h.position.set(sx + hx, 17.1, hz); g.add(h); }
+      }
+      // wall block over the passage, with a pointed-arch opening (dark recess)
+      const wall = new THREE.Mesh(keep(new THREE.BoxGeometry(12, 13, 6.5)), mMud); wall.position.set(0, 6.5, 0); wall.castShadow = wall.receiveShadow = high; g.add(wall);
+      const arch = new THREE.Shape(); arch.moveTo(-2.6, 0); arch.lineTo(-2.6, 5.6); arch.quadraticCurveTo(-2.4, 8.4, 0, 9.4); arch.quadraticCurveTo(2.4, 8.4, 2.6, 5.6); arch.lineTo(2.6, 0); arch.lineTo(-2.6, 0);
+      const ag = keep(new THREE.ShapeGeometry(arch));
+      for (const fz of [3.28, -3.28]) { const a = new THREE.Mesh(ag, mDark); a.position.set(0, 0, fz); if (fz < 0) a.rotation.y = Math.PI; g.add(a); }
+      for (const hx of [-5, -1.7, 1.7, 5]) { const h = new THREE.Mesh(hornGeo, mMud); h.position.set(hx, 14.1, 2.6); g.add(h); }
+      // low flanking city wall stubs
+      const stub = keep(new THREE.BoxGeometry(14, 6, 3));
+      for (const sx of [-18, 18]) { const s = new THREE.Mesh(stub, mMud); s.position.set(sx, 3, 0); s.receiveShadow = high; g.add(s); }
+      g.position.set(gx, terrainAt(gx, gz) - .3, gz);
+      g.rotation.y = Math.atan2(-nx * side, -nz * side); // local +z faces the road
+      group.add(g);
+    }
   }
   // ---------- overhead signs / gantries / landmarks
   const gantries = [];
@@ -329,6 +369,7 @@ export function buildWorld({ scene, renderer, track, route, groundImg, quality, 
   function update(i, pos, dt) {
     for (const c of chunks) { const { a, b } = c.userData; c.visible = b > i - 40 && a < i + ahead; }
     sun.position.set(pos.x + sunDir.x * 300, pos.y + sunDir.y * 300, pos.z + sunDir.z * 300); sun.target.position.set(pos.x, pos.y, pos.z);
+    sky.position.set(pos.x, 0, pos.z); // sky dome follows the player so far routes never leave it
     water.position.x = pos.x; water.position.z = pos.z; // keep the huge water plane centred (texture is world-tiled)
     wn.offset.x = (pos.x / WTILE) % 1 + G_wave.t * .03; wn.offset.y = (-pos.z / WTILE) % 1 + G_wave.t * .02;
     G_wave.t += dt;
