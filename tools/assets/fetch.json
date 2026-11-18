@@ -6,5 +6,17 @@
  {
   "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_221024_b9c06189-c8e2-430c-8258-4ec7901f12e1.glb",
   "out": "hd/public/models/raw/corona-sam3d.glb"
+ },
+ {
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_221419_9327e8e2-1e2c-4aca-b067-b6cbd4b6c840.glb",
+  "out": "hd/public/models/raw/aso-sam3d.glb"
+ },
+ {
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_221440_8c1f2fac-13a4-45f9-a950-d364452f7996.glb",
+  "out": "hd/public/models/raw/mercer-sam3d.glb"
+ },
+ {
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_221441_45f3bdbf-9c58-4140-918c-3c8199132572.glb",
+  "out": "hd/public/models/raw/spirit-sam3d.glb"
  }
 ]
