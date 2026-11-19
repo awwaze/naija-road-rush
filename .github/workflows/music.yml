@@ -1,0 +1,84 @@
+name: Generate music (ACE-Step, CPU)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tracks:
+        description: 'Comma-separated track ids from tools/music/tracks.json, or "all"'
+        default: 'lagos-day'
+      duration:
+        description: 'Seconds per track'
+        default: '100'
+      use_lm:
+        description: 'Use the 0.6B planning LM (better structure, slower)'
+        default: '1'
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: m
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json
+          ids = list(json.load(open('tools/music/tracks.json')))
+          want = "${{ inputs.tracks }}".strip()
+          sel = ids if want == 'all' else [t.strip() for t in want.split(',') if t.strip() in ids]
+          print('matrix=' + json.dumps(sel))
+          EOF
+
+  generate:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        track: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install ACE-Step 1.5 (CPU)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libsndfile1 > /dev/null
+          git clone --depth 1 https://github.com/ACE-Step/ACE-Step-1.5.git ace
+          pip install -q torch==2.10.0 torchaudio==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "transformers>=4.51.0,<4.58.0" diffusers "scipy>=1.10.1" "soundfile>=0.13.1" "loguru>=0.7.3" "einops>=0.8.1" "accelerate>=1.12.0" \
+            "numba>=0.63.1" "vector-quantize-pytorch>=1.27.15" toml peft safetensors xxhash huggingface_hub modelscope matplotlib python-dotenv
+          pip install -q "torchcodec>=0.9.1" || true
+      - name: Generate ${{ matrix.track }}
+        env:
+          ACE_USE_LM: ${{ inputs.use_lm }}
+          HF_HUB_DISABLE_PROGRESS_BARS: '1'
+        run: python tools/music/gen.py "$PWD/ace" "${{ matrix.track }}" "$PWD/out" "${{ inputs.duration }}"
+      - name: Encode MP3 (loudness-normalised, 2 s fade in/out for looping)
+        run: |
+          d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 out/${{ matrix.track }}.wav)
+          ffmpeg -y -loglevel error -i out/${{ matrix.track }}.wav -af "loudnorm=I=-16:TP=-1.5,afade=t=in:d=1.5,afade=t=out:st=$(python3 -c "print(max(0,$d-2.5))"):d=2.5" -ac 2 -ar 44100 -b:a 112k out/${{ matrix.track }}.mp3
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with: { name: 'music-${{ matrix.track }}', path: 'out/${{ matrix.track }}.mp3' }
+
+  collect:
+    needs: generate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'music-*', path: dl, merge-multiple: true }
+      - name: Commit tracks
+        run: |
+          mkdir -p hd/public/music && cp -v dl/*.mp3 hd/public/music/ 2>/dev/null || { echo "no tracks"; exit 0; }
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add hd/public/music && git commit -m "Add generated music tracks [skip ci]" && git pull --rebase && git push || echo "nothing to commit"
