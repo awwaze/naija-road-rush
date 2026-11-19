@@ -195,7 +195,7 @@ function startRace(cityId, routeId, mode = raceMode) {
     setupHud();
     G.state = 'countdown'; G.cd = 3.6; G.cdShown = -1;
     if (save.settings.tilt && Input.tiltSeen && Math.abs(Input.tiltRaw) < 30) Input.tiltNeutral = Input.tiltRaw;
-    AudioSys.stop(); AudioSys.play(G.theme.music, true);
+    AudioSys.playTrack(`music/${cityId}-${G.night ? 'night' : 'day'}.mp3`, G.theme.music); // indigenous city track, synth if not present
     resetCam();
   }, 30);
 }

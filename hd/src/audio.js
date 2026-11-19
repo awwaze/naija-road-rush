@@ -12,7 +12,14 @@ export const AudioSys={
   unlock(){if(!this.init())return;if(this.ctx.state==='suspended')this.ctx.resume().catch(()=>{});},
   applyVol(){if(!this.ctx)return;this.music.gain.value=this.settings.music?.42:0;this.sfx.gain.value=this.settings.sfx?.9:0;},
   play(theme,full){if(!this.ctx)return;this.theme=theme;this.full=full;if(this.timer)return;this.step=0;this.bar=0;this.nextTime=this.ctx.currentTime+.08;this.timer=setInterval(()=>this.schedule(),25);},
-  stop(){clearInterval(this.timer);this.timer=null;},
+  stop(){clearInterval(this.timer);this.timer=null;this.tok=(this.tok||0)+1;if(this.src){try{this.src.stop();}catch(e){}this.src=null;}},
+  // Recorded city track (MP3 in /music), looped; falls back to the synth theme if the file is missing.
+  // Only the current track stays decoded (a 100 s stereo track is ~35 MB in memory).
+  async playTrack(url,fallback){if(!this.ctx)return;this.stop();const tok=this.tok;
+    try{let buf=this.cache&&this.cache.url===url?this.cache.buf:null;
+      if(!buf){const r=await fetch(url);if(!r.ok)throw new Error('missing');const ab=await r.arrayBuffer();if(tok!==this.tok)return;buf=await this.ctx.decodeAudioData(ab);this.cache={url,buf};}
+      if(tok!==this.tok)return;const s=this.ctx.createBufferSource();s.buffer=buf;s.loop=true;s.connect(this.music);s.start();this.src=s;
+    }catch(e){if(tok===this.tok)this.play(fallback,true);}},
   schedule(){const c=this.ctx;if(!c||c.state!=='running')return;const spb=60/this.theme.bpm/4;if(this.nextTime<c.currentTime-.2)this.nextTime=c.currentTime+.05;
     while(this.nextTime<c.currentTime+.12){this.playStep(this.step,this.nextTime);this.nextTime+=spb;this.step=(this.step+1)%16;if(this.step===0)this.bar=(this.bar+1)%8;}},
   playStep(s,t){
