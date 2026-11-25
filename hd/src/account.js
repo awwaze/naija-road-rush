@@ -15,20 +15,31 @@ export const Account = {
   get profile() { return profile; },
   onChange(fn) { listeners.add(fn); fn(profile); return () => listeners.delete(fn); },
 
+  error: null,
   async init(getLocalSave, applyCloudSave) {
     if (!this.enabled) return;
+    this._getLocal = getLocalSave; this._apply = applyCloudSave;
+    try { await this._start(); } catch (e) { this.error = e.code || e.message || 'init failed'; console.warn('accounts unavailable', e); emit(null); }
+  },
+  async _start() {
     const [{ initializeApp }, A, F] = await Promise.all([import('firebase/app'), import('firebase/auth'), import('firebase/firestore')]);
     fb = { A, F };
     const app = initializeApp(FIREBASE_CONFIG);
     auth = NATIVE ? A.initializeAuth(app, { persistence: A.indexedDBLocalPersistence }) : A.getAuth(app);
     db = F.getFirestore(app);
-    this._getLocal = getLocalSave; this._apply = applyCloudSave;
     A.onAuthStateChanged(auth, async user => {
-      if (!user) { try { await A.signInAnonymously(auth); } catch (e) { console.warn('guest sign-in failed', e); emit(null); } return; }
+      if (!user) { try { await A.signInAnonymously(auth); } catch (e) { this.error = e.code || e.message; console.warn('guest sign-in failed', e); emit(null); } return; }
+      this.error = null;
       try { await loadOrCreate(user); } catch (e) { console.warn('profile load failed', e); profile = basic(user); emit(profile); }
     });
   },
 
+  // try again after a failed connection (no internet, blocked, etc.)
+  async retry() {
+    this.error = null; emit(profile);
+    try { if (!fb) await this._start(); else if (!auth.currentUser) await fb.A.signInAnonymously(auth); else await loadOrCreate(auth.currentUser); }
+    catch (e) { this.error = e.code || e.message || 'failed'; emit(profile); }
+  },
   async signInWithGoogle() {
     if (!this.enabled) throw new Error('Sign-in is not set up yet');
     const { A } = fb; let cred;

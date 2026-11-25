@@ -681,7 +681,7 @@ document.querySelectorAll('#qSeg button').forEach(b => b.onclick = async () => {
 // ---------------------------------------------------------------- wiring
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => { AudioSys.unlock(); const g = b.dataset.go;
   if (g === 'menu') { if (G.state === 'garage') { G.state = 'menu'; } show('sMenu'); wallet(); if (G.state !== 'menu') goMenu(); else AudioSys.play({ bpm: 100, root: 45, prog: [0, 8, 3, 10] }, false); }
-  else if (g === 'profile') { show('sProfile'); renderAccount(Account.profile); }
+  else if (g === 'profile') { if (Account.error && !Account.profile) Account.retry(); show('sProfile'); renderAccount(Account.profile); }
   else if (g === 'races') openRaces('race'); else if (MODE_INFO[g]) openRaces(g); else if (g === 'garage') openGarage(); else if (g === 'settings') { show('sSettings'); renderSettings(); } }));
 $('btnPause').onclick = pause; $('btnCam').onclick = cycleCam;
 $('pResume').onclick = resume; $('pRestart').onclick = () => startRace(G.city, G.route.id, G.mode); $('pQuit').onclick = () => goMenu();
@@ -733,9 +733,9 @@ function renderAccount(p) {
   const initial = name.trim()[0] || '?';
   for (const [av, big] of [[$('acctAv'), false], [$('pAv'), true]]) { if (p && p.photo && !p.isGuest) { av.style.backgroundImage = `url(${p.photo})`; av.textContent = ''; } else { av.style.backgroundImage = ''; av.textContent = initial.toUpperCase(); } }
   $('acctName').textContent = name; $('pName').textContent = name;
-  $('acctSub').textContent = !Account.enabled ? 'Online accounts coming soon' : !p ? 'Connecting…' : p.isGuest ? `ID ${p.playerId || '…'} · Tap to sign in` : `ID ${p.playerId || '…'} · Cloud save on`;
+  $('acctSub').textContent = !Account.enabled ? 'Online accounts coming soon' : (!p && Account.error) ? 'Offline · tap to retry' : !p ? 'Connecting…' : p.isGuest ? `ID ${p.playerId || '…'} · Tap to sign in` : `ID ${p.playerId || '…'} · Cloud save on`;
   $('pId').textContent = p && p.playerId ? p.playerId : '—';
-  $('pStat').textContent = !Account.enabled ? 'Accounts will switch on in the next update.' : !p ? 'Connecting…' : p.isGuest ? 'Playing as a guest. Progress is saved on this phone and backed up to your guest profile.' : 'Signed in with Google. Progress is saved to the cloud.';
+  $('pStat').textContent = !Account.enabled ? 'Accounts will switch on in the next update.' : (!p && Account.error) ? `Couldn't reach the game server (${Account.error}). Check your internet, then tap Retry.` : !p ? 'Connecting…' : p.isGuest ? 'Playing as a guest. Progress is saved on this phone and backed up to your guest profile.' : 'Signed in with Google. Progress is saved to the cloud.';
   $('pGoogle').style.display = (Account.enabled && (!p || p.isGuest)) ? '' : 'none';
   $('pOut').style.display = (p && !p.isGuest) ? '' : 'none';
 }
