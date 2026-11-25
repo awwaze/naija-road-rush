@@ -18,7 +18,7 @@ const KMH = 3.6 / SPEED_SCALE;
 
 // ---------------------------------------------------------------- save data (local for now; Google cloud saves come in stage 2)
 const SAVE_KEY = 'nrrHD.v1';
-const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, career: 0, medals: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0, night: false } };
+const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, career: 0, medals: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0, night: false, diff: 'moderate' } };
 let save = (() => { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d) return { ...DEF, ...d, settings: { ...DEF.settings, ...(d.settings || {}) } }; } catch (e) { } return JSON.parse(JSON.stringify(DEF)); })();
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } try { Account.queueSave(save); } catch (e) { } };
 AudioSys.settings = save.settings;
@@ -139,7 +139,7 @@ async function setupRoute(cityId, routeId, forMenu) {
   renderer.toneMappingExposure = theme.exposure;
   G.world = buildWorld({ scene, renderer, track: G.track, route, theme, groundImg: groundImgs[cityId + '/' + routeId], quality: save.settings.quality, onProgress: p => { $('loadFill').style.width = (60 + p * 40).toFixed(0) + '%'; } });
   if (!TM) TM = trafficModels();
-  const tc = forMenu ? [26, 18] : (MODE_INFO[G.mode] || MODE_INFO.race).traffic; spawnTraffic(tc[0], tc[1]);
+  const tc0 = forMenu ? [26, 18] : (MODE_INFO[G.mode] || MODE_INFO.race).traffic, tm = forMenu ? 1 : diff().traffic; spawnTraffic(Math.round(tc0[0] * tm), Math.round(tc0[1] * tm));
   // compile every material's shader now (during loading) so far-off scenery doesn't stutter when it first appears
   try { const hidden = []; G.world.group.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } }); renderer.compile(scene, camera); hidden.forEach(o => { o.visible = false; }); } catch (e) { }
 }
@@ -179,7 +179,7 @@ function startRace(cityId, routeId, mode = raceMode) {
     // rivals on the grid ahead/beside
     const grid = [[64, -1.8], [64, 1.8], [52, -1.8], [52, 1.8], [40, -1.8]];
     // career: rivals get faster stage by stage; quick race keeps the standard pace
-    G.stage = mode === 'career' ? stageIndex(cityId, routeId) : -1; const base = mode === 'career' ? .86 + Math.max(0, G.stage) * .022 : .9;
+    G.stage = mode === 'career' ? stageIndex(cityId, routeId) : -1; const D = diff(); G.diff = D; const base = D.rival + (mode === 'career' ? Math.max(0, G.stage) * D.step : .02);
     const rivalModels = MI.rivals ? await Promise.all(RIVAL_INFO.map(ri => makeCar(carStats(ri.car), ri.color))) : [];
     G.rivals = !MI.rivals ? [] : RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m); m.setNight && m.setNight(G.night);
       return { name: ri.name, color: ri.color, model: m, s: grid[k][0], x: grid[k][1], lane: grid[k][1] < 0 ? 0 : 2, v: 0, max: (spec.top * (base + k * 0.012) + Math.random() * 6) / KMH, react: .2 + Math.random() * .6, len: m.len, wid: m.wid, finished: false, finishT: 0, wreck: 0, wy: 0, wvy: 0, spin: 0 }; });
@@ -190,7 +190,7 @@ function startRace(cityId, routeId, mode = raceMode) {
     buildModeProps();
     $('loading').classList.add('hidden');
     $('hud').classList.remove('hidden'); $('controls').classList.remove('hidden');
-    const stageTxt = mode === 'career' ? `Career · Stage ${G.stage + 1} of ${STAGES().length} · ` : MI.name + ' · ';
+    const stageTxt = (mode === 'career' ? `Career · Stage ${G.stage + 1} of ${STAGES().length} · ` : MI.name + ' · ') + G.diff.label + ' · ';
     $('banner').innerHTML = `<h2>${G.theme.label.toUpperCase()}</h2><p>${G.route.name}</p><div class="sub">${stageTxt}${G.route.start} → ${G.route.end} · ${(T.length / 1000).toFixed(1)} km of real road</div>`; $('banner').style.opacity = 1;
     setupHud();
     G.state = 'countdown'; G.cd = 3.6; G.cdShown = -1;
@@ -254,7 +254,7 @@ function buildModeProps() {
     G.police.push({ s, g, warned: false, done: false });
   }
   if (G.mode === 'trial') { // checkpoints at 1/4, 1/2, 3/4 and the finish; each one adds time
-    const spec = G.player.spec, ref = Math.min(175, spec.top * .74) / KMH; let prev = G.player.s;
+    const spec = G.player.spec, ref = Math.min(175, spec.top * .74) / KMH / diff().time; let prev = G.player.s;
     [.25, .5, .75].forEach((f, i) => { const s = L * f; G.cps.push({ s, add: Math.round((s - prev) / ref + 3) }); add(checkpointArch(i + 1, G.night), s); prev = s; });
     G.cps.push({ s: L - 64, add: 0, finish: true }); add(checkpointArch('FINISH', G.night), L - 64);
     G.nextCp = 0; G.timeLeft = Math.round((G.cps[0].s - G.player.s) / ref + 5);
@@ -291,10 +291,17 @@ function modeUpdate(dt, P, kmh, racing) {
   }
   if (G.mode === 'trial') {
     G.timeLeft -= dt;
-    while (G.nextCp < G.cps.length - 1 && P.s >= G.cps[G.nextCp].s) { const c = G.cps[G.nextCp]; G.nextCp++; const nx = G.cps[G.nextCp]; const addT = nx.finish ? Math.round((nx.s - c.s) / (Math.min(175, P.spec.top * .74) / KMH) + 3) : nx.add; G.timeLeft += addT; AudioSys.chime(); toast(`CHECKPOINT ${G.nextCp}  +${addT}s`, 'good'); }
+    while (G.nextCp < G.cps.length - 1 && P.s >= G.cps[G.nextCp].s) { const c = G.cps[G.nextCp]; G.nextCp++; const nx = G.cps[G.nextCp]; const addT = nx.finish ? Math.round((nx.s - c.s) / (Math.min(175, P.spec.top * .74) / KMH / G.diff.time) + 3) : nx.add; G.timeLeft += addT; AudioSys.chime(); toast(`CHECKPOINT ${G.nextCp}  +${addT}s`, 'good'); }
     if (G.timeLeft <= 0) { G.timeLeft = 0; toast("TIME'S UP!", 'bad'); finish('timeup'); }
   }
 }
+// difficulty (Settings, switch any time): rival pace, assists, traffic, time limits and prize money
+const DIFF = {
+  easy: { label: 'Easy', rival: .80, step: .010, prize: .75, catchup: 1, nitroGain: .06, crashKeep: .94, crashMin: 55, traffic: .65, time: 1.3 },
+  moderate: { label: 'Moderate', rival: .85, step: .014, prize: 1, catchup: .35, nitroGain: 0, crashKeep: .85, crashMin: 35, traffic: 1, time: 1 },
+  hard: { label: 'Hard', rival: .93, step: .02, prize: 1.5, catchup: 0, nitroGain: 0, crashKeep: .8, crashMin: 30, traffic: 1.25, time: .85 },
+};
+const diff = () => DIFF[save.settings.diff] || DIFF.moderate;
 const MEDALS = ['gold', 'silver', 'bronze'], MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' };
 function setupHud() {
   const pl = $('pPos').querySelector('small'), tl = $('hTime').previousElementSibling;
@@ -320,10 +327,13 @@ function update(dt) {
     if (P.drift) { brake = 0; P.driftT += dt; G.nitro = Math.min(1, G.nitro + dt * .14); P.v *= 1 - dt * .05; }
   } else if (P.drift) { P.drift = 0; skids.lift(); }
   const f = T.frame(P.s, F);
-  const vmax = (P.maxKmh * (G.nitroOn ? 1.25 : 1)) / KMH, kmh = P.v * KMH;
+  // catch-up boost (Easy strong, Moderate light): up to +12% top speed and accel when behind the race leader
+  let cu = 0; if (racing && G.diff && G.diff.catchup && G.rivals.length) { const lead = Math.max(...G.rivals.map(r => r.s)); cu = G.diff.catchup * Math.min(.12, Math.max(0, lead - P.s - 25) / 1500); }
+  if (racing && G.diff && G.diff.nitroGain) G.nitro = Math.min(1, G.nitro + dt * G.diff.nitroGain);
+  const vmax = (P.maxKmh * (G.nitroOn ? 1.25 : 1) * (1 + cu)) / KMH, kmh = P.v * KMH;
   // nitro
   if (racing && nos && G.nitro > 0) { if (!G.nitroOn) { AudioSys.nitro(); toast('NITRO!', 'blue', 'n'); } G.nitroOn = true; G.nitro = Math.max(0, G.nitro - dt / (3.2 * P.spec.nos)); } else G.nitroOn = false;
-  const accel = (34 * P.spec.acc) * (1 - Math.pow(Math.min(1, P.v / vmax), 2)) * (G.nitroOn ? 1.8 : 1); // km/h per second
+  const accel = (34 * P.spec.acc) * (1 + cu * 2) * (1 - Math.pow(Math.min(1, P.v / vmax), 2)) * (G.nitroOn ? 1.8 : 1); // km/h per second
   if (gas) P.v += accel / KMH * dt; else if (brake) P.v -= 40 * dt; else P.v -= (4 + P.v * .02) * dt;
   if (P.v > vmax) P.v = Math.max(vmax, P.v - 25 * dt);
   P.v = Math.max(0, P.v);
@@ -465,7 +475,7 @@ function collide(P) {
       const rel = (P.v - o.v) * KMH;
       if (isRival && (rel > 22 || G.nitroOn) && G.state === 'race') { takedown(o, dx); return; }
       if (!isRival && G.nitroOn && o.type !== 'brt' && o.type !== 'tanker') { knock(o, dx); return; }
-      if (ds > 0 && P.v > o.v) { const hard = (P.v - o.v) * KMH > 50; if (!isRival && (P.v - o.v) * KMH > 35) registerCrash(); P.v = o.v * .85; P.s = o.s - (o.len + P.len) / 2 * .93; if (!G.crashCD || G.t - G.crashCD > .6) { G.crashCD = G.t; AudioSys.crash(); G.shake = hard ? .7 : .35; vibrate(hard ? 120 : 50); if (!isRival && Math.random() < .5) setTimeout(() => AudioSys.horn(), 160); } }
+      if (ds > 0 && P.v > o.v) { const hard = (P.v - o.v) * KMH > 50; const DD = G.diff || DIFF.moderate; if (!isRival && (P.v - o.v) * KMH > DD.crashMin) registerCrash(); P.v = o.v * (isRival ? .85 : DD.crashKeep); P.s = o.s - (o.len + P.len) / 2 * .93; if (!G.crashCD || G.t - G.crashCD > .6) { G.crashCD = G.t; AudioSys.crash(); G.shake = hard ? .7 : .35; vibrate(hard ? 120 : 50); if (!isRival && Math.random() < .5) setTimeout(() => AudioSys.horn(), 160); } }
       else if (ds <= 0 && isRival && o.v > P.v) { o.v = P.v * .95; }
       else { const push = Math.sign(dx || 1) * .4; P.x -= push * .5; if (isRival) o.x += push * .5; }
     }
@@ -578,6 +588,7 @@ function results() {
     else L('Distance', (G.player.s / 1000).toFixed(2) + ' of ' + (G.track.length / 1000).toFixed(1) + ' km');
   }
   if (G.police.length) L('Police checkpoints', G.cleared + ' cleared' + (G.fines ? ` · fined ₦${G.fines}` : ''));
+  if (G.diff.prize !== 1 && prize > 0) { const p2 = Math.round(prize * G.diff.prize); L(G.diff.label + ' prize ×' + G.diff.prize, (p2 >= prize ? '+' : '−') + '₦' + Math.abs(p2 - prize)); prize = p2; }
   const total = Math.max(0, prize + G.coinsRun); L('Coins collected', '₦' + G.coinsRun); L('Total earned', '₦' + total);
   save.coins += total; persist();
   $('rTitle').textContent = title; $('rSub').textContent = sub;
@@ -601,7 +612,7 @@ let raceCity = 'lagos';
 function openRaces(mode) {
   if (mode) raceMode = mode; const MI = MODE_INFO[raceMode];
   show('sRaces'); wallet();
-  $('raceTitle').textContent = MI.name; $('raceHint').innerHTML = MI.hint;
+  $('raceTitle').textContent = MI.name; $('raceHint').innerHTML = MI.hint + ` <span class="dchip" id="dchip">Difficulty: <b>${diff().label}</b> · change</span>`; $('dchip').onclick = () => { show('sSettings'); renderSettings(); };
   const night = !!save.settings.night;
   document.querySelectorAll('#todSwitch button').forEach(bt => { bt.classList.toggle('on', (bt.dataset.tod === '1') === night); bt.onclick = () => { save.settings.night = bt.dataset.tod === '1'; persist(); openRaces(); }; });
   const tabs = $('cityTabs'), list = $('raceList'); tabs.innerHTML = ''; list.innerHTML = '';
@@ -661,7 +672,8 @@ $('gPrev').onclick = () => { gIdx = (gIdx + CARS.length - 1) % CARS.length; rend
 $('gNext').onclick = () => { gIdx = (gIdx + 1) % CARS.length; renderGarage(); };
 
 // ---------------------------------------------------------------- settings
-function renderSettings() { document.querySelectorAll('[data-set]').forEach(b => b.classList.toggle('on', !!save.settings[b.dataset.set])); $('sens').value = save.settings.sens; document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === save.settings.quality)); }
+function renderSettings() { document.querySelectorAll('[data-set]').forEach(b => b.classList.toggle('on', !!save.settings[b.dataset.set])); $('sens').value = save.settings.sens; document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === save.settings.quality)); document.querySelectorAll('#dSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === (save.settings.diff || 'moderate'))); }
+document.querySelectorAll('#dSeg button').forEach(b => b.onclick = () => { save.settings.diff = b.dataset.d; persist(); renderSettings(); toast('Difficulty: ' + DIFF[b.dataset.d].label, 'good'); });
 document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { const k = b.dataset.set; save.settings[k] = !save.settings[k]; persist(); renderSettings(); AudioSys.unlock(); AudioSys.applyVol(); if (k === 'tilt' && save.settings.tilt) { Input.tiltAsked = false; requestTilt(); } });
 $('sens').oninput = e => { save.settings.sens = parseFloat(e.target.value); persist(); };
 document.querySelectorAll('#qSeg button').forEach(b => b.onclick = async () => { save.settings.quality = b.dataset.q; persist(); renderSettings(); resize(); await setupRoute('lagos', 'bridge', true); G.state = 'menu'; show('sSettings'); });

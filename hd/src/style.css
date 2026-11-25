@@ -183,3 +183,24 @@ a.mbtn{text-decoration:none;text-align:center;display:block}
 #hTime.warn{color:#ff5252;animation:blink .5s infinite alternate}
 @keyframes blink{to{opacity:.35}}
 .ctabs.hidden{display:none}
+
+/* menu fits short landscape phones: account chip pinned top-right (always visible), menu compact + scrollable */
+#sMenu .acct{position:absolute;top:calc(10px + var(--sat));right:calc(14px + var(--sar));margin:0;z-index:6;max-width:46vw;background:rgba(4,14,9,.78);backdrop-filter:blur(6px)}
+.menuwrap{max-height:calc(100% - 20px - var(--sat) - var(--sab));overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+@media (max-height:480px){
+  .menuwrap{padding:10px 14px;top:calc(10px + var(--sat));transform:none}
+  .menuwrap .logo .a{font-size:20px}.menuwrap .logo .b{font-size:24px}
+  .menuwrap .tag{display:none}
+  .menuwrap .wallet.center{margin:4px 0}
+  .menuwrap .grid{gap:6px}
+  .menuwrap .mbtn{padding:7px 10px;font-size:14px}
+  .menuwrap .mbtn small{font-size:10px;margin-top:1px}
+  .menuwrap .soon{display:none}
+}
+/* tall screens (profile, races, results) never get their top cut off on short phones */
+.screen{align-items:safe center;justify-content:safe center}
+
+.dchip{display:inline-block;margin-left:6px;padding:2px 9px;border-radius:12px;background:rgba(255,213,79,.16);color:#ffd54f;font-size:12px;cursor:pointer;white-space:nowrap}
+.setrow .seg{flex-shrink:0}
+.setrow > div:first-child{min-width:0}
+#dSeg button{padding-left:10px;padding-right:10px}
