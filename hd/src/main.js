@@ -139,7 +139,7 @@ async function setupRoute(cityId, routeId, forMenu) {
   renderer.toneMappingExposure = theme.exposure;
   G.world = buildWorld({ scene, renderer, track: G.track, route, theme, groundImg: groundImgs[cityId + '/' + routeId], quality: save.settings.quality, onProgress: p => { $('loadFill').style.width = (60 + p * 40).toFixed(0) + '%'; } });
   if (!TM) TM = trafficModels();
-  const tc0 = forMenu ? [26, 18] : (MODE_INFO[G.mode] || MODE_INFO.race).traffic, tm = forMenu ? 1 : diff().traffic; spawnTraffic(Math.round(tc0[0] * tm), Math.round(tc0[1] * tm));
+  const D0 = diff(), mk = G.mode === 'career' ? 'race' : G.mode; spawnTraffic(forMenu ? 14 : (D0.cars[mk] || D0.cars.race), forMenu ? 12 : D0.opp);
   // compile every material's shader now (during loading) so far-off scenery doesn't stutter when it first appears
   try { const hidden = []; G.world.group.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } }); renderer.compile(scene, camera); hidden.forEach(o => { o.visible = false; }); } catch (e) { }
 }
@@ -147,13 +147,28 @@ async function setupRoute(cityId, routeId, forMenu) {
 const RIVAL_INFO = [{ name: 'Tunde', car: 'lagoon', color: '#d32f2f' }, { name: 'Chioma', car: 'aso', color: '#8e24aa' }, { name: 'Musa', car: 'mercer', color: '#fb8c00' }, { name: 'Ngozi', car: 'spirit', color: '#00acc1' }, { name: 'Emeka', car: 'corona', color: '#43a047' }];
 const LANES = [-3.6, 0, 3.6], OPP_LANES = [-9.2, -12.8, -16.4];
 
+// Put a same-direction vehicle somewhere in [s0, s1] so that (a) it keeps 35 m from others in its lane and
+// (b) there is ALWAYS at least one free lane: no 40 m stretch ever has all three lanes occupied.
+function placeTraffic(t, s0, s1) {
+  const fixed = t.type === 'brt' || t.type === 'tanker';
+  for (let tries = 0; tries < 24; tries++) {
+    const s = s0 + Math.random() * Math.max(1, s1 - s0), lane = fixed ? 2 : Math.floor(Math.random() * 3);
+    if ((G.ramps || []).some(r => Math.abs(r.s - s) < 60)) continue;
+    let ok = true; const lanes = new Set([lane]);
+    for (const o of G.traffic) { if (o === t || o.knock > 0) continue; const ds = Math.abs(o.s - s);
+      if (o.lane === lane && ds < 35) { ok = false; break; } if (ds < 40) lanes.add(o.lane); }
+    if (ok && lanes.size < 3) { t.s = s; t.lane = lane; t.x = LANES[lane]; return true; }
+  }
+  t.s = Math.min(G.track.length - 60, s1 + 200); t.lane = fixed ? 2 : 1; t.x = LANES[t.lane]; return false;
+}
 function spawnTraffic(nSame, nOpp) {
   const mix = G.theme.traffic, keys = Object.keys(mix), tot = keys.reduce((a, k) => a + mix[k], 0);
   const pickType = () => { let r = Math.random() * tot; for (const k of keys) { r -= mix[k]; if (r <= 0) return k; } return 'car'; };
   const mk = (opp) => { const type = pickType(), m = TM[type][Math.floor(Math.random() * TM[type].length)], mesh = new THREE.Mesh(m.geo, trafficMat); mesh.castShadow = save.settings.quality === 'high'; scene.add(mesh); if (G.night) mesh.add(new THREE.Mesh(headlightGeo(type, m.len, m.wid), headlightMat)); const sp = TRAFFIC_SPEED[type];
-    return { type, mesh, len: m.len, wid: m.wid, lane: Math.floor(Math.random() * 3), x: 0, s: 0, v: (sp[0] + Math.random() * (sp[1] - sp[0])) / KMH, phase: Math.random() * 6, opp }; };
+    const v = (sp[0] + Math.random() * (sp[1] - sp[0])) / KMH; return { type, mesh, len: m.len, wid: m.wid, lane: Math.floor(Math.random() * 3), x: 0, s: 0, v, v0: v, phase: Math.random() * 6, opp }; };
   const L = G.track.length;
-  for (let i = 0; i < nSame; i++) { const t = mk(false); t.s = 250 + Math.random() * (L - 400); t.x = LANES[t.lane]; if (t.type === 'brt' || t.type === 'tanker') { t.lane = 2; t.x = LANES[2]; } G.traffic.push(t); }
+  // spread over the first ~1.6 km (they are recycled ahead of the player as it drives)
+  for (let i = 0; i < nSame; i++) { const t = mk(false); G.traffic.push(t); placeTraffic(t, 220, Math.min(L - 200, 1800)); }
   for (let i = 0; i < nOpp; i++) { const t = mk(true); t.s = Math.random() * L; t.x = OPP_LANES[t.lane]; G.opp.push(t); }
 }
 
@@ -208,8 +223,14 @@ function buildPickups() {
     if (Math.random() < .2) { nitros.push({ s, x: LANES[Math.floor(Math.random() * 3)], got: false }); continue; }
     const lane = LANES[Math.floor(Math.random() * 3)]; for (let k = 0; k < 6; k++) coins.push({ s: s + k * 7, x: lane, got: false });
   }
-  const cg = new THREE.CylinderGeometry(.42, .42, .1, 20); cg.rotateZ(Math.PI / 2);
-  const cm = new THREE.MeshStandardMaterial({ color: 0xffc107, metalness: .9, roughness: .25, emissive: 0x5a3c00, emissiveIntensity: .6 });
+  // coins: big gold discs stamped with ₦ and a soft glow, so they never look like a yellow keke or danfo
+  const cg = new THREE.CylinderGeometry(.6, .6, .12, 28); cg.rotateZ(Math.PI / 2);
+  const cc = document.createElement('canvas'); cc.width = cc.height = 128; const cx = cc.getContext('2d');
+  const gr = cx.createRadialGradient(64, 54, 8, 64, 64, 64); gr.addColorStop(0, '#fff3a0'); gr.addColorStop(.6, '#ffc107'); gr.addColorStop(1, '#b8860b');
+  cx.fillStyle = gr; cx.fillRect(0, 0, 128, 128); cx.strokeStyle = '#8a6200'; cx.lineWidth = 8; cx.beginPath(); cx.arc(64, 64, 54, 0, 7); cx.stroke();
+  cx.fillStyle = '#7a5200'; cx.font = '900 76px Arial'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText('₦', 64, 68);
+  const ct = new THREE.CanvasTexture(cc); ct.colorSpace = THREE.SRGBColorSpace;
+  const cm = new THREE.MeshStandardMaterial({ map: ct, color: 0xffffff, metalness: .7, roughness: .3, emissive: 0xffb300, emissiveIntensity: .55, emissiveMap: ct });
   G.coins = new THREE.InstancedMesh(cg, cm, coins.length); G.coins.userData.list = coins; scene.add(G.coins);
   const ng = new THREE.CapsuleGeometry(.32, .6, 4, 10), nm = new THREE.MeshStandardMaterial({ color: 0x1e88e5, emissive: 0x0d47a1, emissiveIntensity: .9, metalness: .4, roughness: .3 });
   G.nitroPk = new THREE.InstancedMesh(ng, nm, Math.max(1, nitros.length)); G.nitroPk.userData.list = nitros; scene.add(G.nitroPk);
@@ -297,9 +318,9 @@ function modeUpdate(dt, P, kmh, racing) {
 }
 // difficulty (Settings, switch any time): rival pace, assists, traffic, time limits and prize money
 const DIFF = {
-  easy: { label: 'Easy', rival: .80, step: .010, prize: .75, catchup: 1, nitroGain: .06, crashKeep: .94, crashMin: 55, traffic: .65, time: 1.3 },
-  moderate: { label: 'Moderate', rival: .85, step: .014, prize: 1, catchup: .35, nitroGain: 0, crashKeep: .85, crashMin: 35, traffic: 1, time: 1 },
-  hard: { label: 'Hard', rival: .93, step: .02, prize: 1.5, catchup: 0, nitroGain: 0, crashKeep: .8, crashMin: 30, traffic: 1.25, time: .85 },
+  easy: { label: 'Easy', cars: { race: 10, rush: 16, trial: 6 }, opp: 10, rival: .80, step: .010, prize: .75, catchup: 1, nitroGain: .06, crashKeep: .94, crashMin: 55, traffic: .65, time: 1.3 },
+  moderate: { label: 'Moderate', cars: { race: 15, rush: 22, trial: 9 }, opp: 14, rival: .85, step: .014, prize: 1, catchup: .35, nitroGain: 0, crashKeep: .85, crashMin: 35, traffic: 1, time: 1 },
+  hard: { label: 'Hard', cars: { race: 25, rush: 32, trial: 14 }, opp: 18, rival: .93, step: .02, prize: 1.5, catchup: 0, nitroGain: 0, crashKeep: .8, crashMin: 30, traffic: 1.25, time: .85 },
 };
 const diff = () => DIFF[save.settings.diff] || DIFF.moderate;
 const MEDALS = ['gold', 'silver', 'bronze'], MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' };
@@ -422,9 +443,18 @@ function moveTraffic(dt, P) {
       if (G.ramps) for (const r of G.ramps) if (Math.abs(LANES[t.lane] - r.x) < 1 && r.s - t.s > 0 && r.s - t.s < 70) t.lane = t.lane === 1 ? 0 : 1;
       const lx = LANES[t.lane] + (t.type === 'okada' ? Math.sin(G.t * .8 + t.phase) * 1.1 : 0); t.x += (lx - t.x) * Math.min(1, dt * 1.6);
     }
-    if (t.s < ps - 160 || t.s > L - 30) { t.knock = 0; t.kyaw = 0; t.s = Math.min(L - 60, ps + 500 + Math.random() * 900); if (t.s < ps + 300) t.s = ps + 300 + Math.random() * 300; t.lane = (t.type === 'brt' || t.type === 'tanker') ? 2 : Math.floor(Math.random() * 3); t.x = LANES[t.lane]; }
+    if (t.s < ps - 160 || t.s > L - 30) { t.knock = 0; t.kyaw = 0; t.v = t.v0; placeTraffic(t, Math.min(L - 300, ps + 450), Math.min(L - 80, ps + 1400)); }
     t.mesh.visible = Math.abs(t.s - ps) < 1100;
     if (t.mesh.visible) place(t.mesh, t.s, t.x, t.kyaw || 0);
+  }
+  // keep traffic sensible: follow the vehicle ahead in the lane (no driving into each other) and never let
+  // three vehicles drift side by side; the rearmost of a would-be wall eases off until a lane opens.
+  for (const t of G.traffic) {
+    if (t.knock > 0) continue; let want = t.v0;
+    for (const o of G.traffic) { if (o === t || o.knock > 0) continue; const ds = o.s - t.s;
+      if (o.lane === t.lane && ds > 0 && ds < 30) want = Math.min(want, o.v * (ds < 14 ? .9 : 1));
+      if (ds > 0 && ds < 45 && o.lane !== t.lane) { for (const q of G.traffic) if (q !== t && q !== o && !(q.knock > 0) && q.lane !== t.lane && q.lane !== o.lane && q.s - t.s > 0 && q.s - t.s < 45) { want = Math.min(want, t.v0 * (Math.max(ds, q.s - t.s) < 25 ? .5 : .75)); break; } } }
+    t.v += (want - t.v) * Math.min(1, dt * 1.5);
   }
   for (const t of G.opp) {
     t.s -= t.v * dt;
@@ -460,10 +490,14 @@ function updateRivals(dt) {
     target *= 1 - Math.min(.15, Math.abs(G.track.frame(r.s, F2).curv) * 18);
     // traffic ahead in my lane?
     let blocker = null; for (const t of G.traffic) if (Math.abs(t.x - r.x) < 2.2 && t.s > r.s && t.s - r.s < 45) { if (!blocker || t.s < blocker.s) blocker = t; }
-    if (blocker) { const opts = [r.lane - 1, r.lane + 1].filter(l => l >= 0 && l < 3).sort(() => Math.random() - .5); const free = opts.find(l => laneFree(r.s, LANES[l], 50, r)); if (free !== undefined) r.lane = free; else if (blocker.s - r.s < 14) target = Math.min(target, blocker.v * .95); }
+    if (blocker) { const opts = [r.lane - 1, r.lane + 1].filter(l => l >= 0 && l < 3).sort(() => Math.random() - .5); const free = opts.find(l => laneFree(r.s, LANES[l], 50, r)); if (free !== undefined) r.lane = free; else if (blocker.s - r.s < 32) target = Math.min(target, blocker.v * (blocker.s - r.s < 16 ? .9 : 1)); }
     r.v += (target - r.v) * Math.min(1, dt * .55);
     const tx = LANES[r.lane]; r.xv = (tx - r.x) * 2.2; r.x += r.xv * dt;
     r.s += r.v * dt;
+    for (const t of G.traffic) { // solid traffic: a rival that reaches a vehicle stays behind it (same rule as the player)
+      if (t.knock > 0) continue; const ds = t.s - r.s, need = (t.len + r.len) / 2;
+      if (ds > 0 && ds < need && Math.abs(t.x - r.x) < (t.wid + r.wid) / 2 * .9) { r.s = t.s - need - .2; r.v = Math.min(r.v, t.v * .9); }
+    }
     if (!r.finished && r.s >= G.track.length - 64) { r.finished = true; r.finishT = G.raceTime; }
   }
 }
@@ -486,9 +520,10 @@ function collide(P) {
 
 // ---------------------------------------------------------------- camera
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tv = new THREE.Vector3();
-const CAMS = [{ d: 7.2, h: 2.5, look: 9 }, { d: 11.5, h: 4.2, look: 14 }, { d: -.6, h: 1.15, look: 40 }];
+// camera views the player can pick (Settings, or the 🎥 button in a race): default is the far chase that sees over the car
+const CAMS = [{ name: 'Far', d: 9.2, h: 3.7, look: 24 }, { name: 'Near', d: 7.2, h: 2.5, look: 12 }, { name: 'High', d: 13.5, h: 5.6, look: 32 }, { name: 'Bumper', d: -.6, h: 1.15, look: 40 }];
 function resetCam() { const P = G.player, f = G.track.frame(P.s, F); const c = CAMS[G.camMode]; camPos.set(f.x - f.tx * c.d, f.y + c.h, f.z - f.tz * c.d); camera.position.copy(camPos); }
-function cycleCam() { G.camMode = (G.camMode + 1) % CAMS.length; save.settings.cam = G.camMode; persist(); }
+function cycleCam() { G.camMode = (G.camMode + 1) % CAMS.length; save.settings.cam = G.camMode; persist(); toast('🎥 ' + CAMS[G.camMode].name + ' view', 'blue', 'cam'); }
 function updateCamera(dt) {
   const P = G.player, c = CAMS[G.camMode], f = G.track.frame(P.s, F);
   const px = f.x + f.nx * P.x, pz = f.z + f.nz * P.x, py = f.y;
@@ -672,7 +707,8 @@ $('gPrev').onclick = () => { gIdx = (gIdx + CARS.length - 1) % CARS.length; rend
 $('gNext').onclick = () => { gIdx = (gIdx + 1) % CARS.length; renderGarage(); };
 
 // ---------------------------------------------------------------- settings
-function renderSettings() { document.querySelectorAll('[data-set]').forEach(b => b.classList.toggle('on', !!save.settings[b.dataset.set])); $('sens').value = save.settings.sens; document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === save.settings.quality)); document.querySelectorAll('#dSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === (save.settings.diff || 'moderate'))); }
+function renderSettings() { document.querySelectorAll('[data-set]').forEach(b => b.classList.toggle('on', !!save.settings[b.dataset.set])); $('sens').value = save.settings.sens; document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === save.settings.quality)); document.querySelectorAll('#dSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === (save.settings.diff || 'moderate'))); document.querySelectorAll('#cSeg button').forEach(b => b.classList.toggle('on', +b.dataset.c === (save.settings.cam || 0))); }
+document.querySelectorAll('#cSeg button').forEach(b => b.onclick = () => { save.settings.cam = G.camMode = +b.dataset.c; persist(); renderSettings(); });
 document.querySelectorAll('#dSeg button').forEach(b => b.onclick = () => { save.settings.diff = b.dataset.d; persist(); renderSettings(); toast('Difficulty: ' + DIFF[b.dataset.d].label, 'good'); });
 document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { const k = b.dataset.set; save.settings[k] = !save.settings[k]; persist(); renderSettings(); AudioSys.unlock(); AudioSys.applyVol(); if (k === 'tilt' && save.settings.tilt) { Input.tiltAsked = false; requestTilt(); } });
 $('sens').oninput = e => { save.settings.sens = parseFloat(e.target.value); persist(); };
