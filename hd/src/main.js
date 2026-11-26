@@ -9,6 +9,7 @@ import { createPost, Particles, SkidMarks, rampMesh } from './fx.js';
 import { Account } from './account.js';
 import { THEMES, CITY_ORDER, nightTheme } from './themes.js';
 import { MODE_INFO, checkpointArch, policeStop, policeSign } from './modes.js';
+import * as GR from './garage.js';
 
 const $ = id => document.getElementById(id);
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
@@ -18,7 +19,7 @@ const KMH = 3.6 / SPEED_SCALE;
 
 // ---------------------------------------------------------------- save data (local for now; Google cloud saves come in stage 2)
 const SAVE_KEY = 'nrrHD.v1';
-const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, career: 0, medals: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0, night: false, diff: 'moderate' } };
+const DEF = { coins: 1000, owned: ['corona'], car: 'corona', colors: {}, best: {}, career: 0, medals: {}, cust: {}, bp: {}, settings: { tilt: true, sens: 1, autoGas: false, music: true, sfx: true, quality: 'high', cam: 0, night: false, diff: 'moderate' } };
 let save = (() => { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)); if (d) return { ...DEF, ...d, settings: { ...DEF.settings, ...(d.settings || {}) } }; } catch (e) { } return JSON.parse(JSON.stringify(DEF)); })();
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } try { Account.queueSave(save); } catch (e) { } };
 AudioSys.settings = save.settings;
@@ -112,7 +113,10 @@ async function makeCar(spec, color) { if (spec.glb) { try { return await buildGl
 function shine(model) {
   model.group.traverse(o => { if (!o.isMesh) return; const m = o.material; if (model.glb && m.map) { m.envMap = G.world.env; m.envMapIntensity = 1.0; return; } if (m === model.paint) { m.envMap = G.world.env; m.envMapIntensity = 1.15; } else if (m.metalness > .8) { m.envMap = G.world.env; m.envMapIntensity = 1.5; } });
 }
-function carStats(id) { const c = CARS.find(x => x.id === id) || CARS[0]; return c; }
+function baseCar(id) { return CARS.find(x => x.id === id) || CARS[0]; }
+function getCust(id) { const c = baseCar(id); if (!save.cust || save.cust === DEF.cust) save.cust = {}; if (!save.bp || save.bp === DEF.bp) save.bp = {}; if (!save.cust[c.id]) { save.cust[c.id] = GR.defaultCustom(c); if (save.colors[c.id] && !c.livery) save.cust[c.id].paint = save.colors[c.id]; } return save.cust[c.id]; }
+// the player's car with its upgrades applied (rivals always drive stock cars)
+function carStats(id) { const c = baseCar(id); return save.owned.includes(c.id) ? GR.upgraded(c, getCust(c.id)) : c; }
 function place(obj, s, x, yaw = 0, roll = 0, reverse = false) {
   const f = G.track.frame(s, F2);
   obj.position.set(f.x + f.nx * x, f.y + .06, f.z + f.nz * x);
@@ -184,7 +188,7 @@ function startRace(cityId, routeId, mode = raceMode) {
     const T = G.track;
     // player
     const spec = carStats(save.car), color = save.colors[spec.id] || spec.color;
-    const model = await makeCar(spec, color); scene.add(model.group); shine(model); model.setNight && model.setNight(G.night);
+    const model = await makeCar(spec, color); scene.add(model.group); shine(model); GR.applyCustom(model, spec, getCust(spec.id)); model.setNight && model.setNight(G.night);
     if (G.night) { // headlight beam that actually lights the road and traffic ahead
       const beam = new THREE.SpotLight(0xfff0d6, 300, 140, .5, .5, 1.12); beam.position.set(0, (model.headY || .7) + .35, -model.len / 2); beam.target.position.set(0, -1.7, -40);
       const fill = new THREE.PointLight(0xc4d2ff, 7, 9, 1.4); fill.position.set(0, 2.6, 1.6); // soft moon-blue light on the player's car
@@ -195,8 +199,8 @@ function startRace(cityId, routeId, mode = raceMode) {
     const grid = [[64, -1.8], [64, 1.8], [52, -1.8], [52, 1.8], [40, -1.8]];
     // career: rivals get faster stage by stage; quick race keeps the standard pace
     G.stage = mode === 'career' ? stageIndex(cityId, routeId) : -1; const D = diff(); G.diff = D; const base = D.rival + (mode === 'career' ? Math.max(0, G.stage) * D.step : .02);
-    const rivalModels = MI.rivals ? await Promise.all(RIVAL_INFO.map(ri => makeCar(carStats(ri.car), ri.color))) : [];
-    G.rivals = !MI.rivals ? [] : RIVAL_INFO.map((ri, k) => { const s = carStats(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m); m.setNight && m.setNight(G.night);
+    const rivalModels = MI.rivals ? await Promise.all(RIVAL_INFO.map(ri => makeCar(baseCar(ri.car), ri.color))) : [];
+    G.rivals = !MI.rivals ? [] : RIVAL_INFO.map((ri, k) => { const s = baseCar(ri.car), m = rivalModels[k]; scene.add(m.group); shine(m); m.setNight && m.setNight(G.night);
       return { name: ri.name, color: ri.color, model: m, s: grid[k][0], x: grid[k][1], lane: grid[k][1] < 0 ? 0 : 2, v: 0, max: (spec.top * (base + k * 0.012) + Math.random() * 6) / KMH, react: .2 + Math.random() * .6, len: m.len, wid: m.wid, finished: false, finishT: 0, wreck: 0, wy: 0, wvy: 0, spin: 0 }; });
     G.rivals.forEach(r => { r.x = r.lane === 0 ? -1.8 : 1.8; });
     buildPickups(); buildRamps();
@@ -402,7 +406,7 @@ function update(dt) {
   AudioSys.setEngine(true, Math.min(1.2, P.v / (P.maxKmh / KMH)), G.nitroOn);
   updateCamera(dt);
 }
-function placeCar(c, yaw, roll) { place(c.model.group, c.s, c.x, yaw, roll); const rot = c.v * 0.016 / .35; for (const w of c.model.wheels) w.rotation.x -= rot; }
+function placeCar(c, yaw, roll) { place(c.model.group, c.s, c.x, yaw, roll); const rot = c.v * 0.016 / .35; for (const w of c.model.wheels) w.rotation.x -= rot; if (c.model.rims) for (const r of c.model.rims) r.rotation.x -= rot; }
 const FX = {};
 function carPos(c, side = 0, back = 0, up = .4) { const f = G.track.frame(c.s - back, FX); return [f.x + f.nx * (c.x + side), f.y + up + (c.y || 0), f.z + f.nz * (c.x + side), f]; }
 function spark(c, side) {
@@ -587,6 +591,7 @@ function finish(reason = 'finish') {
 }
 function results() {
   $('countdown').textContent = ''; $('hud').classList.add('hidden'); $('controls').classList.add('hidden');
+  G.firstMedal = false;
   const key = G.city + '/' + G.route.id, lines = [], btns = $('rBtns'); let title = '', sub = `${G.route.name} · ${MODE_INFO[G.mode].name}`, prize = 0, next = null;
   const L = (a, b) => lines.push([a, b]);
   if (G.mode === 'race' || G.mode === 'career') {
@@ -598,7 +603,7 @@ function results() {
     if (career) {
       sub = `Career · Stage ${G.stage + 1} · ${G.route.name}`;
       const medal = G.place <= 3 ? MEDALS[G.place - 1] : null, prev = save.medals[key];
-      if (medal) { if (!prev || MEDALS.indexOf(medal) < MEDALS.indexOf(prev)) { save.medals[key] = medal; if (!prev) { prize += 300; L('First medal bonus', '₦300'); } } L('Medal', MEDAL_ICON[medal] + ' ' + medal[0].toUpperCase() + medal.slice(1)); }
+      if (medal) { if (!prev || MEDALS.indexOf(medal) < MEDALS.indexOf(prev)) { save.medals[key] = medal; if (!prev) { prize += 300; G.firstMedal = true; L('First medal bonus', '₦300'); } } L('Medal', MEDAL_ICON[medal] + ' ' + medal[0].toUpperCase() + medal.slice(1)); }
       const all = STAGES();
       if (medal && G.stage === save.career && G.stage + 1 < all.length) { save.career = G.stage + 1; L('Unlocked', '🔓 Stage ' + (G.stage + 2) + ': ' + all[G.stage + 1].name); }
       else if (medal && G.stage + 1 >= all.length) L('Career', '🏆 Champion of Nigeria!');
@@ -622,6 +627,10 @@ function results() {
     if (ok) { L('Time', fmt(G.raceTime) + (nb ? ' (new best!)' : '')); if (!nb && best) L('Best', fmt(best)); L('Time left', G.timeLeft.toFixed(1) + 's'); L('Prize money', '₦' + prize); }
     else L('Distance', (G.player.s / 1000).toFixed(2) + ' of ' + (G.track.length / 1000).toFixed(1) + ' km');
   }
+  if (!save.bp || save.bp === DEF.bp) save.bp = {};
+  { let n = 0; if (G.mode === 'race' || G.mode === 'career') n = G.place === 1 ? 2 : G.place <= 3 ? 1 : 0; else if (G.finishReason === 'finish') n = 1;
+    if (G.mode === 'career' && G.place <= 3 && G.firstMedal) n += 2;
+    if (n) { const ln = awardBlueprints(n); if (ln) L(...ln); } }
   if (G.police.length) L('Police checkpoints', G.cleared + ' cleared' + (G.fines ? ` · fined ₦${G.fines}` : ''));
   if (G.diff.prize !== 1 && prize > 0) { const p2 = Math.round(prize * G.diff.prize); L(G.diff.label + ' prize ×' + G.diff.prize, (p2 >= prize ? '+' : '−') + '₦' + Math.abs(p2 - prize)); prize = p2; }
   const total = Math.max(0, prize + G.coinsRun); L('Coins collected', '₦' + G.coinsRun); L('Total earned', '₦' + total);
@@ -678,33 +687,179 @@ function openRaces(mode) {
   });
 }
 
-// ---------------------------------------------------------------- garage (3D turntable)
-const gScene = new THREE.Scene(); let gCar = null, gIdx = 0, gEnv = null;
-const gCam = new THREE.PerspectiveCamera(40, 1, .1, 200);
+// ---------------------------------------------------------------- garage (Asphalt-style showroom)
+const gScene = new THREE.Scene(); let gCar = null, gCarId = null, gIdx = 0, gEnv = null, gStage = null, gTab = 'over', gPreview = null;
+const gCam = new THREE.PerspectiveCamera(36, 1, .1, 200);
+// car yaw: front faces the camera at PI. Each tab swings the car to show what you are changing.
+const TAB_VIEW = { over: [Math.PI - .65, .24, 7.4, true], up: [Math.PI - .65, .2, 7.7, true], paint: [Math.PI + .75, .36, 7.1, true], extras: [Math.PI / 2 + .3, .1, 6, false], plate: [.18, .15, 5.6, false] };
+const GV = { yaw: Math.PI - .65, tYaw: Math.PI - .65, pitch: .24, tPitch: .24, dist: 8.4, tDist: 8.4, auto: true, drag: null, idle: 9 };
+const PACKS = [
+  { id: 'bronze', name: 'Bronze Pack', price: 800, n: 3, max: 'B', col: '#cd7f32', note: '3 blueprints · class C–B' },
+  { id: 'silver', name: 'Silver Pack', price: 2500, n: 5, max: 'A', col: '#cfd8dc', note: '5 blueprints · up to class A' },
+  { id: 'gold', name: 'Gold Pack', price: 6000, n: 8, max: 'S', col: '#ffb300', note: '8 blueprints · any class, even S' }];
+const CLASS_ORDER = ['D', 'C', 'B', 'A', 'S'];
+const baseClass = c => GR.carClass(c);
+const bpNeed = c => GR.BP_NEED[baseClass(c)];
 function setupGarageScene() {
-  if (gEnv) return;
-  const pm = new THREE.PMREMGenerator(renderer); import('three/addons/environments/RoomEnvironment.js').then(({ RoomEnvironment }) => { gEnv = pm.fromScene(new RoomEnvironment(), .04).texture; gScene.environment = gEnv; });
-  gScene.background = new THREE.Color(0x0d1a14);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 48), new THREE.MeshStandardMaterial({ color: 0x1d2b25, roughness: .35, metalness: .3 })); floor.rotation.x = -Math.PI / 2; gScene.add(floor);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(3.2, 3.35, 64), new THREE.MeshBasicMaterial({ color: 0x00c46a })); ring.rotation.x = -Math.PI / 2; ring.position.y = .01; gScene.add(ring);
-  const l = new THREE.DirectionalLight(0xffffff, 2); l.position.set(4, 8, 3); gScene.add(l); gScene.add(new THREE.AmbientLight(0xffffff, .4));
+  if (gStage) return; gStage = GR.buildShowroom(gScene);
+  const pm = new THREE.PMREMGenerator(renderer); import('three/addons/environments/RoomEnvironment.js').then(({ RoomEnvironment }) => { gEnv = pm.fromScene(new RoomEnvironment(), .04).texture; gScene.environment = gEnv; if (gCar) envCar(gCar); });
+  // drag anywhere on the empty showroom to spin the car
+  const el = $('sGarage');
+  el.addEventListener('pointerdown', e => { if (e.target.closest('.glist,.gpanel,.gbot,.toprow,.gmodal,.gtitle')) return; GV.drag = { x: e.clientX, yaw: GV.tYaw }; GV.idle = 0; el.setPointerCapture && el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e => { if (!GV.drag) return; GV.tYaw = GV.drag.yaw + (e.clientX - GV.drag.x) * .012; GV.yaw = GV.tYaw; });
+  const up = () => { GV.drag = null; GV.idle = 0; }; el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
 }
-function openGarage() { setupGarageScene(); gIdx = Math.max(0, CARS.findIndex(c => c.id === save.car)); G.state = 'garage'; show('sGarage'); renderGarage(); AudioSys.stop(); AudioSys.play({ bpm: 96, root: 43, prog: [0, 5, 8, 7] }, false); }
-const PAINTS = ['#c62828', '#1e88e5', '#fdd835', '#00a859', '#fb8c00', '#8e24aa', '#f5f5f5', '#212121', '#b0bec5'];
+function envCar(m) { if (m.glb && gEnv) m.group.traverse(o => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) { o.material.envMap = gEnv; o.material.envMapIntensity = 1.25; o.material.needsUpdate = true; } }); }
+function openGarage(id) {
+  setupGarageScene(); gIdx = Math.max(0, CARS.findIndex(c => c.id === (id || save.car))); gPreview = null; gCarId = null;
+  G.state = 'garage'; show('sGarage'); setTab(gTab, true); AudioSys.stop(); AudioSys.play({ bpm: 96, root: 43, prog: [0, 5, 8, 7] }, false);
+}
+function setTab(t, snap) {
+  gTab = t; gPreview = null; const v = TAB_VIEW[t]; GV.tYaw = nearestYaw(GV.yaw, v[0]); GV.tPitch = v[1]; GV.tDist = v[2]; GV.auto = v[3]; GV.idle = 0;
+  if (snap) { GV.yaw = GV.tYaw; GV.pitch = GV.tPitch; GV.dist = GV.tDist; }
+  document.querySelectorAll('#gTabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); renderGarage(); $('gBody').scrollTop = 0;
+}
+function nearestYaw(cur, target) { const k = Math.round((cur - target) / (Math.PI * 2)); return target + k * Math.PI * 2; }
+function curCar() { return CARS[gIdx]; }
+function isOwned(c) { return save.owned.includes(c.id); }
+function viewCust() { const c = curCar(), cu = isOwned(c) ? getCust(c.id) : GR.defaultCustom(c); return gPreview ? { ...cu, [gPreview.kind]: gPreview.val } : cu; }
+function refreshCarLook() { if (gCar && gCarId === curCar().id) GR.applyCustom(gCar, curCar(), viewCust()); }
+function loadGarageCar() {
+  const c = curCar(); if (gCarId === c.id) { refreshCarLook(); return; }
+  gCarId = c.id; if (gCar) gScene.remove(gCar.group); gCar = null; const token = (loadGarageCar.t = (loadGarageCar.t || 0) + 1);
+  makeCar(c, save.colors[c.id] || c.color).then(m => { if (token !== loadGarageCar.t) return; m.setNight && m.setNight(false); if (gCar) gScene.remove(gCar.group); gCar = m; m.group.position.y = .14; envCar(m); GR.applyCustom(m, c, viewCust()); gScene.add(m.group); });
+}
+function stars(n) { return '★'.repeat(n) + '☆'.repeat(GR.MAX_LV - n); }
+function renderGarageList() {
+  const box = $('gList'); box.innerHTML = '';
+  CARS.forEach((c, i) => {
+    const cls = baseClass(c), own = isOwned(c), need = bpNeed(c), have = save.bp[c.id] || 0, b = document.createElement('button');
+    b.className = 'gcard' + (i === gIdx ? ' sel' : '') + (own ? '' : ' locked'); b.style.setProperty('--cc', GR.CLASS_COL[cls]);
+    const status = own ? (save.car === c.id ? '<span class="drv">● Driving</span> ' : '') + `<span class="st">${stars(GR.stars(getCust(c.id)))}</span>` : (need && have >= need ? '<span class="rdy">🧩 Ready to unlock</span>' : `🔒 🧩${have}/${need} · ₦${c.price.toLocaleString()}`);
+    b.innerHTML = `<b class="cls">${cls}</b><div><div class="cn">${c.name}</div>${c.edition ? `<div class="ce">${c.edition}</div>` : ''}<div class="cs">${status}</div></div>`;
+    b.onclick = () => { if (gIdx === i) return; gIdx = i; gPreview = null; if (!isOwned(c) && gTab !== 'over') setTab('over'); else renderGarage(); AudioSys.chime && AudioSys.click && AudioSys.click(); };
+    box.appendChild(b);
+  });
+  const sel = box.children[gIdx]; if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
+}
+function statBars(c) {
+  const st = isOwned(c) ? carStats(c.id) : c;
+  const rows = [['Top speed', c.top, st.top, 300, st.top + ' km/h'], ['Acceleration', c.acc, st.acc, 1.75], ['Handling', c.grip, st.grip, 1.6], ['Nitro', c.nos, st.nos, 1.9]];
+  return rows.map(([n, b, u, mx, t]) => `<div class="gstat"><span>${n}</span><div class="bar"><i style="width:${(b / mx * 100).toFixed(1)}%"></i><em style="left:${(b / mx * 100).toFixed(1)}%;width:${((u - b) / mx * 100).toFixed(1)}%"></em></div><small>${t || (u / b > 1.001 ? '+' + Math.round((u / b - 1) * 100) + '%' : '')}</small></div>`).join('');
+}
+function optBtn(kind, val, label, price, owned, on) {
+  const p = gPreview && gPreview.kind === kind && gPreview.val === val;
+  return `<button class="gopt${on ? ' on' : ''}${p ? ' prev' : ''}" data-k="${kind}" data-v="${String(val)}" data-p="${price}" data-l="${label}">${label}<small>${owned ? (on ? '✓ Fitted' : 'Owned') : price ? '₦' + price.toLocaleString() : 'Free'}</small></button>`;
+}
+function renderGarageBody() {
+  const c = curCar(), own = isOwned(c), body = $('gBody'), cu = own ? getCust(c.id) : null, vc = viewCust();
+  if (gTab !== 'over' && !own) { body.innerHTML = `<div class="glocked">🔒<br>Unlock the <b>${c.name}</b> to tune it and make it yours.</div>`; return; }
+  if (gTab === 'over') {
+    const st = own ? carStats(c.id) : c, need = bpNeed(c), have = save.bp[c.id] || 0;
+    body.innerHTML = `<div class="grate"><b class="cls" style="background:${GR.CLASS_COL[baseClass(c)]}">${baseClass(c)}</b><div><div class="rn">${GR.rating(st)}</div><small>Performance rating</small></div>${own ? `<div class="gst">${stars(GR.stars(cu))}</div>` : ''}</div>
+      ${statBars(c)}<p class="gd">${c.desc}</p>
+      ${own ? '' : need ? `<div class="gsec">BLUEPRINTS</div><div class="bpbar"><i style="width:${Math.min(100, have / need * 100)}%"></i><span>🧩 ${have} / ${need}</span></div><p class="gd">Win races, earn career medals and open packs to collect blueprints — or buy it outright.</p>` : ''}`;
+  } else if (gTab === 'up') {
+    const u = cu.up;
+    body.innerHTML = `<div class="gsec">PERFORMANCE PARTS · ${stars(GR.stars(cu))}</div>` + Object.entries(GR.UPGRADES).map(([k, d]) => {
+      const lv = u[k] || 0, cost = GR.upgradeCost(c, lv), max = lv >= GR.MAX_LV;
+      return `<div class="uprow"><span class="ui">${d.icon}</span><div class="ul">${d.label}<div class="pips">${Array.from({ length: GR.MAX_LV }, (_, j) => `<i class="${j < lv ? 'on' : ''}"></i>`).join('')}</div></div><button class="upb" data-up="${k}" ${max || save.coins < cost ? 'disabled' : ''}>${max ? 'MAX' : '₦' + cost.toLocaleString()}</button></div>`;
+    }).join('') + statBars(c) + `<p class="gd">Every 4 levels across all parts earns a star. Upgrades raise this car's rating.</p>`;
+  } else if (gTab === 'paint') {
+    const factory = !vc.paint;
+    body.innerHTML = `<div class="gsec">COLOUR</div><div class="swatches gsw"><button class="sw fac${factory ? ' sel' : ''}" data-paint="" title="Factory"></button>${GR.PAINT_COLORS.map(p => `<button class="sw${vc.paint === p ? ' sel' : ''}" data-paint="${p}" style="background:${p}"></button>`).join('')}</div>
+      <div class="gsec">FINISH</div><div class="gopts">${Object.entries(GR.FINISHES).map(([k, f]) => optBtn('finish', k, f.label, f.price, cu.owned.finish.includes(k), vc.finish === k)).join('')}</div>
+      <div class="gsec">STRIPES</div><div class="gopts">${Object.entries(GR.STRIPES).map(([k, f]) => optBtn('stripe', k, f.label, f.price, cu.owned.stripe.includes(k), vc.stripe === k)).join('')}</div>
+      ${vc.stripe === 'twin' || vc.stripe === 'side' ? `<div class="gsec">STRIPE COLOUR</div><div class="swatches gsw">${['#f5f5f5', '#212121', '#ffb300', '#c62828', '#1e88e5', '#1b8a3c', '#0d3c8c', '#d81b60'].map(p => `<button class="sw${vc.stripeCol === p ? ' sel' : ''}" data-scol="${p}" style="background:${p}"></button>`).join('')}</div>` : ''}`;
+  } else if (gTab === 'extras') {
+    body.innerHTML = `<div class="gsec">RIMS</div><div class="gopts">${Object.entries(GR.RIMS).map(([k, f]) => optBtn('rim', k, f.label, f.price, cu.owned.rim.includes(k), vc.rim === k)).join('')}</div>
+      <div class="gsec">UNDERGLOW</div><div class="gopts">${Object.entries(GR.GLOWS).map(([k, f]) => optBtn('glow', k, f.label, f.price, cu.owned.glow.includes(k), vc.glow === k)).join('')}</div>
+      <div class="gsec">REAR WING</div><div class="gopts">${optBtn('spoiler', false, 'None', 0, true, !vc.spoiler)}${optBtn('spoiler', true, 'Race wing', 600, cu.owned.spoiler, !!vc.spoiler)}</div>
+      <div class="gsec">HEADLIGHTS</div><div class="gopts">${Object.entries(GR.HEADLIGHTS).map(([k, f]) => optBtn('head', k, f.label, f.price, cu.owned.head.includes(k), vc.head === k)).join('')}</div>`;
+  } else if (gTab === 'plate') {
+    body.innerHTML = `<div class="gsec">NUMBER PLATE</div><div class="plateprev"><div class="ps">${GR.PLATE_STATES[cu.state][0]}</div><input id="gPlate" maxlength="9" value="${cu.plate}" autocomplete="off" spellcheck="false"><div class="pm">${GR.PLATE_STATES[cu.state][1]}</div></div>
+      <div class="gopts" style="margin-top:6px"><button class="gopt" id="gPlateRnd">🎲 Random</button></div>
+      <div class="gsec">STATE</div><div class="gopts">${GR.PLATE_STATES.map(([s], i) => `<button class="gopt sm${cu.state === i ? ' on' : ''}" data-state="${i}">${s}</button>`).join('')}</div>
+      <p class="gd">Letters and numbers only. Your plate shows front and back.</p>`;
+    const inp = $('gPlate'); inp.oninput = () => { const v = inp.value.toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 9); if (v !== inp.value) inp.value = v; cu.plate = v.trim() || 'NAIJA'; persist(); refreshCarLook(); };
+    $('gPlateRnd').onclick = () => { cu.plate = GR.randomPlate(); persist(); refreshCarLook(); renderGarageBody(); };
+  }
+  // wire buttons
+  body.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { const k = b.dataset.up, lv = cu.up[k] || 0, cost = GR.upgradeCost(c, lv); if (lv >= GR.MAX_LV || save.coins < cost) return; save.coins -= cost; cu.up[k] = lv + 1; persist(); AudioSys.chime(); toast(`${GR.UPGRADES[k].label} · Level ${lv + 1}`, 'good'); renderGarage(); });
+  body.querySelectorAll('[data-paint]').forEach(b => b.onclick = () => { cu.paint = b.dataset.paint || null; persist(); gPreview = null; refreshCarLook(); renderGarageBody(); renderGarageBot(); });
+  body.querySelectorAll('[data-scol]').forEach(b => b.onclick = () => { cu.stripeCol = b.dataset.scol; persist(); refreshCarLook(); renderGarageBody(); });
+  body.querySelectorAll('[data-state]').forEach(b => b.onclick = () => { cu.state = +b.dataset.state; persist(); refreshCarLook(); renderGarageBody(); });
+  body.querySelectorAll('.gopt[data-k]').forEach(b => b.onclick = () => {
+    const kind = b.dataset.k, raw = b.dataset.v, val = kind === 'spoiler' ? raw === 'true' : raw, price = +b.dataset.p;
+    const owned = kind === 'spoiler' ? (!val || cu.owned.spoiler) : cu.owned[kind].includes(val);
+    if (owned) { cu[kind] = val; gPreview = null; persist(); } else gPreview = { kind, val, price, label: b.dataset.l };
+    refreshCarLook(); renderGarageBody(); renderGarageBot();
+  });
+}
+function renderGarageBot() {
+  const c = curCar(), own = isOwned(c), bot = $('gBot'), need = bpNeed(c), have = save.bp[c.id] || 0; bot.innerHTML = '';
+  const add = (t, cls, fn, dis) => { const b = document.createElement('button'); b.className = 'mbtn ' + cls; b.innerHTML = t; b.disabled = !!dis; b.onclick = fn; bot.appendChild(b); return b; };
+  if (gPreview && own) {
+    const cu = getCust(c.id), p = gPreview;
+    add(`Buy ${p.label} · ₦${p.price.toLocaleString()}`, 'gold', () => { if (save.coins < p.price) return; save.coins -= p.price; if (p.kind === 'spoiler') cu.owned.spoiler = true; else cu.owned[p.kind].push(p.val); cu[p.kind] = p.val; gPreview = null; persist(); AudioSys.chime(); toast(p.label + ' fitted', 'good'); renderGarage(); }, save.coins < p.price);
+    add('✕', 'alt x', () => { gPreview = null; refreshCarLook(); renderGarageBody(); renderGarageBot(); });
+  } else if (!own) {
+    if (need && have >= need) add('🧩 Unlock free', 'gold', () => unlockCar(c, 'bp'));
+    add('Buy ₦' + c.price.toLocaleString(), need && have >= need ? 'alt' : 'gold', () => unlockCar(c, 'coins'), save.coins < c.price);
+  } else if (save.car === c.id) add('✓ Your ride', 'alt', null, true);
+  else add('Drive this car', 'gold', () => { save.car = c.id; persist(); AudioSys.chime(); renderGarage(); });
+}
+function unlockCar(c, how) {
+  if (isOwned(c)) return;
+  if (how === 'coins') { if (save.coins < c.price) return; save.coins -= c.price; }
+  else { const need = bpNeed(c); if ((save.bp[c.id] || 0) < need) return; save.bp[c.id] -= need; }
+  save.owned.push(c.id); save.car = c.id; getCust(c.id); persist(); AudioSys.chime(); toast(`🔓 ${c.name} unlocked!`, 'good'); GV.idle = 0; GV.tYaw += Math.PI * 2; renderGarage();
+}
 function renderGarage() {
-  wallet(); const c = CARS[gIdx], owned = save.owned.includes(c.id), color = save.colors[c.id] || c.color;
-  if (gCar) gScene.remove(gCar.group); gCar = null; const token = (renderGarage.t = (renderGarage.t || 0) + 1);
-  makeCar(c, color).then(m => { m.setNight && m.setNight(false); if (token !== renderGarage.t) return; if (gCar) gScene.remove(gCar.group); gCar = m; if (m.glb && gEnv) m.group.traverse(o => { if (o.isMesh) { o.material.envMap = gEnv; o.material.envMapIntensity = 1.3; } }); gScene.add(m.group); });
-  $('gBrand').textContent = c.brand.toUpperCase(); $('gName').textContent = c.name; $('gDesc').textContent = c.desc;
-  $('gStats').innerHTML = [['Top speed', c.top / 280, c.top + ' km/h'], ['Acceleration', c.acc / 1.45], ['Grip', c.grip / 1.3], ['Nitro', c.nos / 1.45]].map(([n, v, t]) => `<div class="stat"><span>${n}</span><div class="bar"><i style="width:${Math.min(100, v * 100).toFixed(0)}%"></i></div></div>`).join('') + `<div style="font-size:11px;opacity:.7">Top speed ${c.top} km/h</div>`;
-  const sw = $('gSw'); sw.innerHTML = ''; if (owned && !c.glb) PAINTS.forEach(p => { const b = document.createElement('button'); b.className = 'sw' + (p === color ? ' sel' : ''); b.style.background = p; b.onclick = () => { save.colors[c.id] = p; persist(); renderGarage(); }; sw.appendChild(b); });
-  const buy = $('gBuy');
-  if (!owned) { buy.textContent = 'Buy ₦' + c.price.toLocaleString(); buy.disabled = save.coins < c.price; buy.onclick = () => { if (save.coins >= c.price) { save.coins -= c.price; save.owned.push(c.id); save.car = c.id; persist(); AudioSys.chime(); renderGarage(); } }; }
-  else if (save.car === c.id) { buy.textContent = '✓ Selected'; buy.disabled = true; }
-  else { buy.textContent = 'Drive this car'; buy.disabled = false; buy.onclick = () => { save.car = c.id; persist(); renderGarage(); }; }
+  wallet(); const c = curCar(), cls = baseClass(c);
+  $('gTitle').innerHTML = `<div class="gbrand">${c.brand.toUpperCase()}${c.edition ? ` · <span class="ed">${c.edition}</span>` : ''}</div><div class="gname"><b class="cls" style="background:${GR.CLASS_COL[cls]}">${cls}</b> ${c.name}</div>`;
+  renderGarageList(); renderGarageBody(); renderGarageBot(); loadGarageCar();
 }
-$('gPrev').onclick = () => { gIdx = (gIdx + CARS.length - 1) % CARS.length; renderGarage(); };
-$('gNext').onclick = () => { gIdx = (gIdx + 1) % CARS.length; renderGarage(); };
+document.querySelectorAll('#gTabs button').forEach(b => b.onclick = () => setTab(b.dataset.t));
+function garageFrame(dt) {
+  GV.idle += dt; if (GV.auto && !GV.drag && GV.idle > 2.5) GV.tYaw += dt * .35;
+  const k = 1 - Math.exp(-dt * 5); GV.yaw += (GV.tYaw - GV.yaw) * k; GV.pitch += (GV.tPitch - GV.pitch) * k; GV.dist += (GV.tDist - GV.dist) * k;
+  if (gCar) gCar.group.rotation.y = GV.yaw; if (gStage) gStage.disc.rotation.y = GV.yaw;
+  const W = innerWidth, H = innerHeight, list = $('gList'), panel = $('gPanel');
+  const lw = list ? list.getBoundingClientRect().right : 0, rw = panel ? W - panel.getBoundingClientRect().left : 0, cx = (lw + (W - rw)) / 2;
+  gCam.aspect = W / H; gCam.setViewOffset(W, H, W / 2 - cx, H * .04, W, H);
+  const fit = Math.max(1, 1.25 * 900 / Math.max(500, W - lw - rw + 260)); // pull back on narrow centre areas
+  const d = GV.dist * Math.min(1.5, fit); gCam.position.set(0, .55 + d * Math.sin(GV.pitch), d * Math.cos(GV.pitch)); gCam.lookAt(0, .55, 0); gCam.updateProjectionMatrix();
+  renderer.render(gScene, gCam);
+}
+// ---------------------------------------------------------------- blueprints + packs
+function lockedCars(maxCls) { const mi = CLASS_ORDER.indexOf(maxCls || 'S'); return CARS.filter(c => !isOwned(c) && bpNeed(c) > 0 && CLASS_ORDER.indexOf(baseClass(c)) <= mi && (save.bp[c.id] || 0) < bpNeed(c)); }
+function pickWeighted(pool) { const w = pool.map(c => 1 / bpNeed(c)), t = w.reduce((a, b) => a + b, 0); let r = Math.random() * t; for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; } return pool[pool.length - 1]; }
+// give n blueprints to one random locked car; returns a results line or null
+function awardBlueprints(n) {
+  const pool = lockedCars(); if (!pool.length) return null; const c = pickWeighted(pool), need = bpNeed(c);
+  save.bp[c.id] = Math.min(need, (save.bp[c.id] || 0) + n); const have = save.bp[c.id];
+  return ['Blueprints', `🧩 +${n} ${c.name}` + (have >= need ? ' · ready to unlock!' : ` (${have}/${need})`)];
+}
+function openPacks() {
+  const m = $('gPacks'); m.classList.remove('hidden'); wallet();
+  $('pkRow').innerHTML = PACKS.map(p => { const any = lockedCars(p.max).length; return `<button class="pack" data-pk="${p.id}" style="--pc:${p.col}" ${save.coins < p.price ? 'disabled' : ''}><div class="pkn">${p.name}</div><div class="pki">🧩</div><div class="pkd">${p.note}</div>${any ? '' : '<div class="pkd warn">You own every car here — pays coins back</div>'}<div class="pkp">₦${p.price.toLocaleString()}</div></button>`; }).join('');
+  $('pkReveal').innerHTML = ''; $('pkReveal').classList.add('hidden'); $('pkRow').classList.remove('hidden');
+  $('pkRow').querySelectorAll('[data-pk]').forEach(b => b.onclick = () => buyPack(PACKS.find(p => p.id === b.dataset.pk)));
+}
+function buyPack(p) {
+  if (save.coins < p.price) return; save.coins -= p.price; const got = {}; let refund = 0;
+  for (let i = 0; i < p.n; i++) { const pool = lockedCars(p.max).filter(c => (save.bp[c.id] || 0) + (got[c.id] || 0) < bpNeed(c)); if (!pool.length) { refund += Math.round(p.price / p.n * .7); continue; } const c = pickWeighted(pool); got[c.id] = (got[c.id] || 0) + 1; }
+  for (const [id, n] of Object.entries(got)) save.bp[id] = (save.bp[id] || 0) + n;
+  save.coins += refund; persist(); AudioSys.chime(); wallet();
+  const cards = Object.entries(got).map(([id, n]) => { const c = CARS.find(x => x.id === id), cls = baseClass(c), have = save.bp[id], need = bpNeed(c); return `<div class="pcard" style="--cc:${GR.CLASS_COL[cls]}"><div class="in"><div class="back">🧩</div><div class="front"><b class="cls">${cls}</b><div class="pcn">${c.name}</div><div class="pcb">+${n} blueprint${n > 1 ? 's' : ''}</div><div class="bpbar sm"><i style="width:${have / need * 100}%"></i><span>${have}/${need}</span></div>${have >= need ? '<div class="rdy">Ready to unlock!</div>' : ''}</div></div></div>`; });
+  if (refund) cards.push(`<div class="pcard" style="--cc:#ffcc33"><div class="in"><div class="back">🧩</div><div class="front"><div class="pki">₦</div><div class="pcn">Coins back</div><div class="pcb">₦${refund.toLocaleString()}</div></div></div></div>`);
+  $('pkRow').classList.add('hidden'); const rv = $('pkReveal'); rv.classList.remove('hidden');
+  rv.innerHTML = `<div class="pcards">${cards.join('')}</div><div class="btnrow"><button class="mbtn alt" id="pkMore">More packs</button><button class="mbtn gold" id="pkDone">Done</button></div>`;
+  [...rv.querySelectorAll('.pcard')].forEach((el, i) => setTimeout(() => { el.classList.add('flip'); AudioSys.chime(); }, 350 + i * 420));
+  $('pkMore').onclick = openPacks; $('pkDone').onclick = () => { $('gPacks').classList.add('hidden'); renderGarage(); };
+}
+$('gPackBtn').onclick = openPacks; $('pkClose').onclick = () => { $('gPacks').classList.add('hidden'); renderGarage(); };
 
 // ---------------------------------------------------------------- settings
 function renderSettings() { document.querySelectorAll('[data-set]').forEach(b => b.classList.toggle('on', !!save.settings[b.dataset.set])); $('sens').value = save.settings.sens; document.querySelectorAll('#qSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === save.settings.quality)); document.querySelectorAll('#dSeg button').forEach(b => b.classList.toggle('on', b.dataset.d === (save.settings.diff || 'moderate'))); document.querySelectorAll('#cSeg button').forEach(b => b.classList.toggle('on', +b.dataset.c === (save.settings.cam || 0))); }
@@ -735,7 +890,7 @@ function frame(now) {
   let dt = Math.min(.1, (now - last) / 1000); last = now; acc += dt; let n = 0;
   while (acc >= STEP && n < 4) { if (G.state === 'countdown') countdown(STEP); else if (G.state === 'race' || G.state === 'finished' || G.state === 'menu') update(STEP * (G.timeScale || 1)); acc -= STEP; n++; }
   if (n >= 4) acc = 0;
-  if (G.state === 'garage') { if (gCar) gCar.group.rotation.y += dt * .5; gCam.aspect = innerWidth / innerHeight; gCam.position.set(0, 2.1, 7.6); gCam.lookAt(0, .6, 0); gCam.updateProjectionMatrix(); renderer.render(gScene, gCam); return; }
+  if (G.state === 'garage') { garageFrame(dt); return; }
   if (G.world) {
     if (post && save.settings.quality === 'high') {
       const P = G.player, kmh = P ? P.v * KMH : 0, racing = G.state === 'race' || G.state === 'finished';
@@ -754,11 +909,14 @@ function frame(now) {
 function applyCloudSave(remote, mergeGuest) {
   const local = save;
   const merged = { ...DEF, ...remote, settings: local.settings };
+  merged.cust = { ...(merged.cust || {}) }; merged.bp = { ...(merged.bp || {}) };
   if (mergeGuest) { // keep the best of guest progress and the cloud profile
     merged.coins = Math.max(local.coins || 0, remote.coins || 0);
     merged.owned = [...new Set([...(remote.owned || []), ...(local.owned || [])])];
     merged.best = { ...(remote.best || {}) }; for (const [k, v] of Object.entries(local.best || {})) if (!merged.best[k] || (k.startsWith('rush/') ? v > merged.best[k] : v < merged.best[k])) merged.best[k] = v;
     merged.career = Math.max(local.career || 0, remote.career || 0);
+    merged.bp = { ...(remote.bp || {}) }; for (const [k, v] of Object.entries(local.bp || {})) merged.bp[k] = Math.max(v, merged.bp[k] || 0);
+    const lvl = c => c && c.up ? Object.values(c.up).reduce((a, b) => a + b, 0) : -1; merged.cust = { ...(remote.cust || {}) }; for (const [k, v] of Object.entries(local.cust || {})) if (lvl(v) > lvl(merged.cust[k])) merged.cust[k] = v;
     const rank = m => m ? ['gold', 'silver', 'bronze'].indexOf(m) : 9; merged.medals = { ...(remote.medals || {}) }; for (const [k, v] of Object.entries(local.medals || {})) if (rank(v) < rank(merged.medals[k])) merged.medals[k] = v;
   }
   save = merged; AudioSys.settings = save.settings; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { }

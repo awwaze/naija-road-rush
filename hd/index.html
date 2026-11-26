@@ -80,13 +80,21 @@
 
   <div class="screen hidden" id="sGarage">
     <div class="garagebar">
-      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Garage</h3><span class="wallet">₦ <span class="wv">0</span></span></div>
-      <div class="gbottom">
-        <button class="navb" id="gPrev">◀</button>
-        <div class="ginfo"><div class="gbrand" id="gBrand"></div><div class="gname" id="gName"></div><div class="gdesc" id="gDesc"></div><div id="gStats"></div><div class="swatches" id="gSw"></div></div>
-        <button class="navb" id="gNext">▶</button>
+      <div class="toprow"><button class="back" data-go="menu">◀ Back</button><h3>Garage</h3><span class="gtr"><button class="packbtn" id="gPackBtn">🧩 Packs</button><span class="wallet">₦ <span class="wv">0</span></span></span></div>
+    </div>
+    <div class="glist" id="gList"></div>
+    <div class="gtitle" id="gTitle"></div>
+    <div class="gpanel" id="gPanel">
+      <div class="gtabs" id="gTabs"><button data-t="over" class="on">Info</button><button data-t="up">Tune</button><button data-t="paint">Paint</button><button data-t="extras">Parts</button><button data-t="plate">Plate</button></div>
+      <div class="gbody" id="gBody"></div>
+    </div>
+    <div class="gbot" id="gBot"></div>
+    <div class="gmodal hidden" id="gPacks">
+      <div class="gmbox">
+        <div class="toprow"><span></span><h3>Blueprint Packs</h3><span class="gtr"><span class="wallet">₦ <span class="wv">0</span></span><button class="back" id="pkClose">✕</button></span></div>
+        <div class="pkrow" id="pkRow"></div>
+        <div class="hidden" id="pkReveal"></div>
       </div>
-      <div class="btnrow"><button class="mbtn gold" id="gBuy">Buy</button></div>
     </div>
   </div>
 

@@ -10,7 +10,13 @@ export const CARS = [
   { id: 'spirit', brand: 'Hondo', name: 'Spirit Hatch', desc: 'Nimble, quick off the line', price: 3000, top: 222, acc: 1.15, grip: 1.1, nos: 1.0, style: 'hatch', color: '#1e88e5', glb: 'models/raw/spirit-sam3d.glb', len: 4.1 },
   { id: 'mercer', brand: 'Mercer', name: 'S-Class Executive', desc: 'Smooth, powerful, very official', price: 8000, top: 238, acc: 1.1, grip: 1.15, nos: 1.15, style: 'exec', color: '#212121', glb: 'models/raw/mercer-sam3d.glb', len: 5.0 },
   { id: 'aso', brand: 'Aso Motors', name: 'V8 Hammer', desc: 'Big engine, bigger attitude', price: 14000, top: 252, acc: 1.28, grip: 1.02, nos: 1.25, style: 'muscle', color: '#fdd835', glb: 'models/raw/aso-sam3d.glb', len: 4.75 },
-  { id: 'lagoon', brand: 'Lagoon', name: 'RS Super', desc: 'Built for Third Mainland at dawn (AI-modelled test car)', price: 25000, top: 275, acc: 1.38, grip: 1.25, nos: 1.4, style: 'gt', color: '#00a859', glb: 'models/test-ai-supercar.glb', len: 4.55 },
+  { id: 'lagoon', brand: 'Lagoon', name: 'RS Super', desc: 'Built for Third Mainland at dawn', price: 25000, top: 275, acc: 1.38, grip: 1.25, nos: 1.4, style: 'gt', color: '#00a859', glb: 'models/test-ai-supercar.glb', len: 4.55 },
+  // special editions: same bodies, own livery and tuned stats
+  { id: 'corona_police', brand: 'Toyo', name: 'Corona Police Interceptor', edition: 'Police Edition', desc: 'Siren-white with a blue band. Pull over!', price: 6000, top: 228, acc: 1.12, grip: 1.08, nos: 1.1, style: 'sedan', color: '#f5f5f5', glb: 'models/raw/corona-sam3d.glb', len: 4.6, livery: { paint: '#f5f5f5', stripe: 'side', stripeCol: '#0d3c8c', rim: 'black' } },
+  { id: 'spirit_rally', brand: 'Hondo', name: 'Spirit Harmattan Rally', edition: 'Rally Edition', desc: 'Dust-orange rally hatch with a big wing', price: 9000, top: 236, acc: 1.25, grip: 1.2, nos: 1.1, style: 'hatch', color: '#ff6d00', glb: 'models/raw/spirit-sam3d.glb', len: 4.1, livery: { paint: '#ff6d00', stripe: 'twin', stripeCol: '#212121', rim: 'black', spoiler: true } },
+  { id: 'mercer_gold', brand: 'Mercer', name: 'S-Class Owambe Gold', edition: 'Owambe Edition', desc: 'Pearl gold and gold rims. You have arrived.', price: 16000, top: 250, acc: 1.18, grip: 1.2, nos: 1.2, style: 'exec', color: '#b8860b', glb: 'models/raw/mercer-sam3d.glb', len: 5.0, livery: { paint: '#b8860b', finish: 'pearl', rim: 'gold' } },
+  { id: 'aso_eagles', brand: 'Aso Motors', name: 'V8 Hammer Super Eagles', edition: 'Super Eagles Edition', desc: 'Green-white-green. For the fans.', price: 22000, top: 262, acc: 1.35, grip: 1.08, nos: 1.32, style: 'muscle', color: '#1b8a3c', glb: 'models/raw/aso-sam3d.glb', len: 4.75, livery: { paint: '#1b8a3c', stripe: 'naija', rim: 'chrome', spoiler: true } },
+  { id: 'lagoon_black', brand: 'Lagoon', name: 'RS Super Midnight', edition: 'Midnight Edition', desc: 'Matte black, gold stripes, purple glow', price: 38000, top: 288, acc: 1.45, grip: 1.3, nos: 1.48, style: 'gt', color: '#212121', glb: 'models/test-ai-supercar.glb', len: 4.55, livery: { paint: '#212121', finish: 'matte', stripe: 'twin', stripeCol: '#ffb300', glow: 'purple', rim: 'gold' } },
 ];
 
 const STY = {
@@ -183,5 +189,5 @@ export async function buildGlbCar(spec) {
     const t = new THREE.Mesh(new THREE.BoxGeometry(.4, .1, .04), tailM); t.position.set(x * (W / 2 - .3), H * .5, spec.len / 2 + .03); lights.add(t);
   }
   return { group: g, wheels: [], len: spec.len, wid: W, paint, glb: true, headY: H * .42,
-    setBrake(on) { tailM.color.setRGB(on ? 7 : 3.2, on ? .3 : .15, on ? .25 : .12); }, setNight(on) { lights.visible = on; } };
+    setBrake(on) { tailM.color.setRGB(on ? 7 : 3.2, on ? .3 : .15, on ? .25 : .12); }, setNight(on) { lights.visible = on; }, setHeadColor(h) { headM.color.setRGB(...h.rgb); } };
 }
