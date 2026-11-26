@@ -30,9 +30,11 @@ jobs:
           pip install -q omegaconf==2.3.0 Pillow==10.1.0 einops==0.7.0 transformers==4.35.0 trimesh==4.0.5 "rembg[cpu]" huggingface-hub imageio fast-simplification numpy==1.26.4 onnxruntime scipy scikit-build-core cmake ninja pybind11
           pip install -q --no-build-isolation git+https://github.com/tatsy/torchmcubes.git
       - name: Download pictures
+        env:
+          CARS: ${{ inputs.cars }}
         run: |
           mkdir -p in
-          for e in ${{ inputs.cars }}; do n="${e%%|*}"; u="${e#*|}"; curl -sSL "$u" -o "in/$n.png"; file "in/$n.png"; done
+          for e in $CARS; do n="${e%%|*}"; u="${e#*|}"; curl -sSL "$u" -o "in/$n.png"; file "in/$n.png"; done
       - name: Generate meshes
         run: |
           cd tsr
