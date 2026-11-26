@@ -939,7 +939,7 @@ $('pOut').onclick = async () => { await Account.flushNow().catch(() => { }); awa
 $('pCopy').onclick = async () => { const id = $('pId').textContent; try { await navigator.clipboard.writeText(id); toast('Player ID copied', 'good'); } catch (e) { toast('ID: ' + id, 'gold'); } };
 Account.init(() => save, applyCloudSave).catch(e => console.warn('accounts unavailable', e));
 
-window.__NRRHD = { G, startRace, goMenu, save, CITY: () => CITY, INDEX: () => INDEX, camera, renderer, scene, getPost: () => post };
+window.__NRRHD = { G, startRace, goMenu, save, CITY: () => CITY, INDEX: () => INDEX, camera, renderer, scene, getPost: () => post, CARS, openGarage };
 (async () => {
   try { await loadIndex(); await goMenu(); $('loading').classList.add('hidden'); requestAnimationFrame(frame); }
   catch (e) { $('loadTxt').textContent = 'Could not load: ' + e.message; console.error(e); }
