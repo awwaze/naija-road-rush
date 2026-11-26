@@ -18,5 +18,9 @@
  {
   "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261118_221441_45f3bdbf-9c58-4140-918c-3c8199132572.glb",
   "out": "hd/public/models/raw/spirit-sam3d.glb"
+ },
+ {
+  "url": "https://d8j0ntlcm91z4.cloudfront.net/user_3JnCnJ2CrjeUH0co9tpDqKfOTDt/hf_20261126_144756_fb4cd604-b734-4322-885c-c322450bc8a4.glb",
+  "out": "hd/public/models/raw/ekogt-sam3d.glb"
  }
 ]
